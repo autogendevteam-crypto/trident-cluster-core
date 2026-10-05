@@ -1,0 +1,196 @@
+{
+  "name": "01_Gmail_Watcher. ",
+  "nodes": [
+    {
+      "parameters": {
+        "chatId": "708137568 ",
+        "text": "=📧 Nuova Email Importante!  Da: {{ $json.from }} Oggetto: {{ $json.subject }}  {{ $json.text }} ",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram ",
+      "typeVersion": 1.2,
+      "position": [
+        32,
+        -96
+      ],
+      "id": "0729b95b-8944-4c13-b9b7-fc950dd27871 ",
+      "name": "Send a text message ",
+      "webhookId": "2a9bd58e-7979-4107-86b8-2cf42b2e0d8f ",
+      "credentials": {
+        "telegramApi": {
+          "id": "qP4ZETl1TzsKHYOJ ",
+          "name": "Smart Notes Bot "
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {
+          "trackLastMessageId": true
+        }
+      },
+      "type": "n8n-nodes-base.emailReadImap ",
+      "typeVersion": 2.2,
+      "position": [
+        -496,
+        -352
+      ],
+      "id": "db68f284-8237-452d-a21e-c2f782e29dcc ",
+      "name": "morrispagani@ ",
+      "credentials": {
+        "imap": {
+          "id": "tnm5pMfmpbZJKN4m ",
+          "name": "morrispagani@ "
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {
+          "trackLastMessageId": true
+        }
+      },
+      "type": "n8n-nodes-base.emailReadImap ",
+      "typeVersion": 2.2,
+      "position": [
+        -496,
+        -176
+      ],
+      "id": "f5a0413f-8c6d-4c64-ac98-f43f10fed8e3 ",
+      "name": "autogen.dev.team@ ",
+      "credentials": {
+        "imap": {
+          "id": "8kmXiPDYMwYlfxai ",
+          "name": "autogen.dev.team@ "
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {
+          "trackLastMessageId": true
+        }
+      },
+      "type": "n8n-nodes-base.emailReadImap ",
+      "typeVersion": 2.2,
+      "position": [
+        -496,
+        0
+      ],
+      "id": "9efe1d01-aa26-4831-b361-33d5ab76a378 ",
+      "name": "muchcolor@ ",
+      "credentials": {
+        "imap": {
+          "id": "YqIhfi8TySBAqx2x ",
+          "name": "muchcolor@ "
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {
+          "trackLastMessageId": true
+        }
+      },
+      "type": "n8n-nodes-base.emailReadImap ",
+      "typeVersion": 2.2,
+      "position": [
+        -512,
+        224
+      ],
+      "id": "c523b661-2ff3-4237-9b83-5feb9ddd0aec ",
+      "name": "giovi.epif@ ",
+      "credentials": {
+        "imap": {
+          "id": "WXOhIl6oIQJxjVi1 ",
+          "name": "IMAP account "
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const allowedSenders = [\n   \"avv.andrea.tagliabue@gmail.com \",\n   \"b.ghirardi@comune.tradate.va.it \",\n   \"marco.fontana@asst-valleolona.it \",\n   \"EUROUFFICIO.TRADATE@gmail.com \",\n   \"sabrina.dellaRagione@giustizia.it \",\n   \"buffetti.tradate@gmail.com \",\n   \"ServizioPEC_Retail@posteitaliane.it \",\n   \"paganiedo@gmail.com \",\n   \"andypag81@gmail.com \",\n   \"no-reply@doctolib.it \",\n   \"rapportiesterni@alervarese.com \",\n   \"protocollo@alervarese.com \",\n   \"giovanna.gentile@alervarese.com \",\n   \"simona.cusenza@alervarese.com \",\n   \"angelanobile63@gmail.com \",\n   \"aclitradate@aclivarese.it \",\n   \"much71@gmail.com \"\n];\n\nreturn $input.all().filter(item = > {\n  const sender = item.json.from ||  \" \";\n  return allowedSenders.some(allowed = > sender.toLowerCase().includes(allowed.toLowerCase()));\n}); "
+      },
+      "type": "n8n-nodes-base.code ",
+      "typeVersion": 2,
+      "position": [
+        -176,
+        -96
+      ],
+      "id": "c3c700cb-a2d5-4c4a-809f-c9dc9d7dae08 ",
+      "name": "Code in JavaScript "
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "morrispagani@": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript ",
+            "type": "main ",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "autogen.dev.team@": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript ",
+            "type": "main ",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "muchcolor@": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript ",
+            "type": "main ",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "giovi.epif@": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript ",
+            "type": "main ",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Send a text message ",
+            "type": "main ",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1 ",
+    "binaryMode": "separate ",
+    "availableInMCP": false
+  },
+  "versionId": "0f086f63-1443-410f-aadf-1523302ef425 ",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "c48a3fda0169838b4d38a59adf3ff689edef6ce2d0cfca6afeaf2a9633e5ff8e "
+  },
+  "nodeGroups": [],
+  "id": "5yZ40qhTes6OsPx7 ",
+  "tags": []
+}

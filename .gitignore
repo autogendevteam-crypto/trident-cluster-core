@@ -1,0 +1,25 @@
+# Environment variables (SECRETS)
+.env
+.env.local
+.env.production
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# n8n internal
+.n8n/
+
+# Temporary files
+*.log

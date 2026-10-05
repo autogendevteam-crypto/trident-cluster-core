@@ -1,0 +1,225 @@
+{
+  "name": "1_Ingestione_Dati copy ",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression ",
+              "expression": "0 20 * * * "
+            }
+          ]
+        }
+      },
+      "name": "Schedule Trigger 20:00 ",
+      "type": "n8n-nodes-base.scheduleTrigger ",
+      "typeVersion": 1.2,
+      "position": [
+        -960,
+        64
+      ],
+      "id": "acccf21d-5e5a-4848-96e4-2f23bee0a788 "
+    },
+    {
+      "parameters": {},
+      "name": "Manual Trigger (Test) ",
+      "type": "n8n-nodes-base.manualTrigger ",
+      "typeVersion": 1,
+      "position": [
+        -960,
+        304
+      ],
+      "id": "8ac1048a-91f9-4f62-a0b3-4354517bf41c "
+    },
+    {
+      "parameters": {
+        "url": "http://192.168.8.124:8080/remote.php/webdav/AI_Inbox/notes.txt ",
+        "authentication": "genericCredentialType ",
+        "genericAuthType": "httpBasicAuth ",
+        "options": {}
+      },
+      "name": "Read notes.txt ",
+      "type": "n8n-nodes-base.httpRequest ",
+      "typeVersion": 4.5,
+      "position": [
+        -720,
+        160
+      ],
+      "id": "ed7def55-e888-4e0b-b0a8-b65fca3aca48 ",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "WevYWVPe2Sz2UAqp ",
+          "name": "nextcloud WebDAV Basic "
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const allData = [];\nconst errors = [];\ntry {\n  const notesNode = $node[ \"HTTP Request (Nextcloud notes) \"] || $node[ \"Nextcloud Read Notes \"];\n  const notesJson = notesNode ? notesNode.json : {};\n  let content = notesJson.body || notesJson.data || notesJson.content || notesJson.text;\n  if (content  & & typeof content === 'object') { content = JSON.stringify(content); }\n  if (!content) { content = JSON.stringify(notesJson); }\n  if (content  & & content.trim().length  > 0) { allData.push({ source: 'Nextcloud', content: content }); }\n} catch (e) { errors.push('Nextcloud: ' + e.message); }\nreturn [{ json: { aggregatedData: allData, errors: errors } }]; "
+      },
+      "name": "Parse  & Normalize ",
+      "type": "n8n-nodes-base.code ",
+      "typeVersion": 2,
+      "position": [
+        -480,
+        160
+      ],
+      "id": "3e0daa38-4971-497f-a4dc-3028252da7f4 "
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "=={{ $json.count }} ",
+              "operation": "larger ",
+              "value2": "={{ 0 }} "
+            }
+          ]
+        }
+      },
+      "name": "Check Data Not Empty ",
+      "type": "n8n-nodes-base.if ",
+      "typeVersion": 1,
+      "position": [
+        -240,
+        160
+      ],
+      "id": "c1cd451a-bd37-49ad-a4b2-d4796a02046d "
+    },
+    {
+      "parameters": {
+        "chatId": "708137568 ",
+        "text": "📭 notes.txt vuoto - nessuna nota da analizzare oggi. ",
+        "additionalFields": {}
+      },
+      "name": "Notify Empty ",
+      "type": "n8n-nodes-base.telegram ",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        304
+      ],
+      "id": "c47299f7-acd2-4414-8823-b6fe2c76f10d ",
+      "webhookId": "3994e245-a381-4e06-a21e-7f99ca432b08 ",
+      "credentials": {
+        "telegramApi": {
+          "id": "yJLNGB3kJ2tS3b1W ",
+          "name": "Telegram account "
+        }
+      }
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "bXjorvtonBbjQyHz ",
+          "mode": "id ",
+          "cachedResultUrl": "/workflow/bXjorvtonBbjQyHz "
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow ",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow ",
+      "typeVersion": 1.3,
+      "position": [
+        -16,
+        64
+      ],
+      "id": "ac9ae5d9-0187-43c3-912f-b9397e97ba35 ",
+      "name": "Call '2_Analisi_AI_MultiProvider' "
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger 20:00": {
+      "main": [
+        [
+          {
+            "node": "Read notes.txt ",
+            "type": "main ",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger (Test)": {
+      "main": [
+        [
+          {
+            "node": "Read notes.txt ",
+            "type": "main ",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read notes.txt": {
+      "main": [
+        [
+          {
+            "node": "Parse  & Normalize ",
+            "type": "main ",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse  & Normalize": {
+      "main": [
+        [
+          {
+            "node": "Check Data Not Empty ",
+            "type": "main ",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Data Not Empty": {
+      "main": [
+        [
+          {
+            "node": "Call '2_Analisi_AI_MultiProvider' ",
+            "type": "main ",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify Empty ",
+            "type": "main ",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call '2_Analisi_AI_MultiProvider'": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1 ",
+    "binaryMode": "separate ",
+    "availableInMCP": false
+  },
+  "versionId": "714ea8bc-6280-4430-a494-a31c288901bf ",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "c48a3fda0169838b4d38a59adf3ff689edef6ce2d0cfca6afeaf2a9633e5ff8e "
+  },
+  "nodeGroups": [],
+  "id": "84IwaNPkxN6nvpDX ",
+  "tags": []
+}

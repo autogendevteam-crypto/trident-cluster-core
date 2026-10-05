@@ -1,0 +1,136 @@
+{
+  "name": "3_Consegna_Notifica_FIXED ",
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "Execute Workflow Trigger ",
+      "type": "n8n-nodes-base.executeWorkflowTrigger ",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "583f8397-4fd0-4cc9-8c2a-f7202d2377d3 "
+    },
+    {
+      "parameters": {
+        "jsCode": "const report = $input.first().json.report || '';\nconst now = new Date();\nconst dateStr = now.toISOString().slice(0, 10);\nconst timeStr = now.toTimeString().slice(0, 8).replace( /:/g, '-') + '-' + now.getMilliseconds();\nconst fileName = 'report_' + dateStr + '_' + timeStr + '.md';\nreturn [{ json: { fileName: fileName, fileContent: report } }]; "
+      },
+      "name": "Prepara Nome File ",
+      "type": "n8n-nodes-base.code ",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "id": "856e2608-136e-448b-b89d-24b8aad0daea "
+    },
+    {
+      "parameters": {
+        "method": "PUT ",
+        "url": "=http://192.168.8.124:8080/remote.php/webdav/00_System/Automation_Reports/{{ $json.fileName }} ",
+        "authentication": "genericCredentialType ",
+        "genericAuthType": "httpBasicAuth ",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type ",
+              "value": "text/markdown "
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw ",
+        "body": "={{ $json.fileContent }} ",
+        "options": {}
+      },
+      "name": "Upload Nextcloud ",
+      "type": "n8n-nodes-base.httpRequest ",
+      "typeVersion": 4.5,
+      "position": [
+        480,
+        0
+      ],
+      "id": "c8a0c0ae-86ea-4f33-8b1b-22d2ed08ba99 ",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "WevYWVPe2Sz2UAqp ",
+          "name": "nextcloud WebDAV Basic "
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "708137568 ",
+        "text": "={{ '📄 Report salvato su Nextcloud: 00_System/Automation_Reports/' + $json.fileName }} ",
+        "additionalFields": {}
+      },
+      "name": "Notifica Telegram ",
+      "type": "n8n-nodes-base.telegram ",
+      "typeVersion": 1.2,
+      "position": [
+        720,
+        0
+      ],
+      "id": "31aa3cfa-1296-4d23-9d0f-50171b788c22 ",
+      "webhookId": "c790e626-29d8-417d-8169-f0db807ad563 ",
+      "credentials": {
+        "telegramApi": {
+          "id": "qP4ZETl1TzsKHYOJ ",
+          "name": "Smart Notes Bot "
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Prepara Nome File ",
+            "type": "main ",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepara Nome File": {
+      "main": [
+        [
+          {
+            "node": "Upload Nextcloud ",
+            "type": "main ",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload Nextcloud": {
+      "main": [
+        [
+          {
+            "node": "Notifica Telegram ",
+            "type": "main ",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1 ",
+    "binaryMode": "separate ",
+    "availableInMCP": false
+  },
+  "versionId": "01e320ac-ed62-4b25-b851-bc05d945d249 ",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "c48a3fda0169838b4d38a59adf3ff689edef6ce2d0cfca6afeaf2a9633e5ff8e "
+  },
+  "nodeGroups": [],
+  "id": "6vJnOJ4PzmKfU3nO ",
+  "tags": []
+}

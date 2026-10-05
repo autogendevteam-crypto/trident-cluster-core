@@ -1,0 +1,292 @@
+{
+  "name": "WF8_Auto_Ingest_RAG ",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes ",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "name": "Schedule Trigger ",
+      "type": "n8n-nodes-base.scheduleTrigger ",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "wf8-schedule-001 "
+    },
+    {
+      "parameters": {
+        "authentication": "basicAuth ",
+        "operation": "download ",
+        "fileId": "=/RAG_Inbox/ ",
+        "options": {}
+      },
+      "name": "Nextcloud: List Files ",
+      "type": "n8n-nodes-base.nextCloud ",
+      "typeVersion": 1,
+      "position": [
+        240,
+        0
+      ],
+      "id": "wf8-nc-list ",
+      "credentials": {
+        "nextCloudApi": {
+          "id": "NEXTCLOUD_CREDENTIAL_ID ",
+          "name": "Nextcloud Admin "
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst mdFiles = items.filter(item = > {\n  const path = item.json.path || '';\n  return path.endsWith('.md') || path.endsWith('.txt');\n});\n\nreturn mdFiles.map(item = > ({\n  json: {\n    file_path: item.json.path,\n    file_name: item.json.path.split('/').pop(),\n    nc_path: item.json.path\n  }\n})); "
+      },
+      "name": "Code: Filter MD Files ",
+      "type": "n8n-nodes-base.code ",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ],
+      "id": "wf8-code-filter "
+    },
+    {
+      "parameters": {
+        "batchSize": 1
+      },
+      "name": "Split In Batches ",
+      "type": "n8n-nodes-base.splitInBatches ",
+      "typeVersion": 3,
+      "position": [
+        720,
+        0
+      ],
+      "id": "wf8-split "
+    },
+    {
+      "parameters": {
+        "authentication": "basicAuth ",
+        "operation": "download ",
+        "fileId": "={{ $json.file_path }} ",
+        "options": {}
+      },
+      "name": "Nextcloud: Download File ",
+      "type": "n8n-nodes-base.nextCloud ",
+      "typeVersion": 1,
+      "position": [
+        960,
+        0
+      ],
+      "id": "wf8-nc-download ",
+      "credentials": {
+        "nextCloudApi": {
+          "id": "NEXTCLOUD_CREDENTIAL_ID ",
+          "name": "Nextcloud Admin "
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const text = $input.first().json.data.toString('utf8');\nconst fileName = $input.first().json.file_name || 'unknown.md';\nconst ncPath = $input.first().json.nc_path || '/RAG_Inbox /';\nconst chunks = [];\nconst chunkSize = 800;\nconst overlap = 100;\n\nfor (let i = 0; i  < text.length; i += (chunkSize - overlap)) {\n  chunks.push({\n    json: {\n      chunk_text: text.substring(i, i + chunkSize),\n      file_name: fileName,\n      chunk_index: Math .floor(i / (chunkSize - overlap)) + 1,\n      nc_path: ncPath\n    }\n  });\n}\nreturn chunks; "
+      },
+      "name": "Code: Chunking ",
+      "type": "n8n-nodes-base.code ",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        0
+      ],
+      "id": "wf8-code-chunk "
+    },
+    {
+      "parameters": {
+        "method": "POST ",
+        "url": "http://192.168.8.129:1234/v1/embeddings ",
+        "sendBody": true,
+        "specifyBody": "json ",
+        "jsonBody": "={\n   \"model \":  \"text-embedding-bge-m3 \",\n   \"input \": {{ JSON.stringify($json.chunk_text) }}\n} ",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "name": "HTTP: Embedding Bionic ",
+      "type": "n8n-nodes-base.httpRequest ",
+      "typeVersion": 4.5,
+      "position": [
+        1440,
+        0
+      ],
+      "id": "wf8-http-embed ",
+      "retryOnFail": true,
+      "maxTries": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\nconst fileName = $json.file_name;\nconst chunkIndex = $json.chunk_index;\nconst stableId = crypto.createHash('sha256').update( `${fileName}_chunk${chunkIndex}` ).digest('hex').substring(0, 36);\n\nconst embedding = $json.data[0].embedding;\n\nreturn {\n  json: {\n    qdrant_id: stableId,\n    vector: embedding,\n    payload: {\n      chunk_id:  `${fileName}_chunk${chunkIndex}` ,\n      text_content: $json.chunk_text,\n      document_type:  \"auto_ingested \",\n      language:  \"it \",\n      status:  \"active \",\n      source_reference: $json.nc_path,\n      nextcloud_path: $json.nc_path\n    },\n    nc_path: $json.nc_path,\n    file_name: $json.file_name\n  }\n}; "
+      },
+      "name": "Code: Prep Qdrant Payload ",
+      "type": "n8n-nodes-base.code ",
+      "typeVersion": 2,
+      "position": [
+        1680,
+        0
+      ],
+      "id": "wf8-code-payload "
+    },
+    {
+      "parameters": {
+        "method": "PUT ",
+        "url": "http://192.168.8.124:6333/collections/trade_bot_knowledge/points?wait=true ",
+        "sendBody": true,
+        "specifyBody": "json ",
+        "jsonBody": "={\n   \"points \": [\n    {\n       \"id \": {{ JSON.stringify($json.qdrant_id) }},\n       \"vector \": {{ JSON.stringify($json.vector) }},\n       \"payload \": {{ JSON.stringify($json.payload) }}\n    }\n  ]\n} ",
+        "options": {}
+      },
+      "name": "HTTP: Qdrant Upsert ",
+      "type": "n8n-nodes-base.httpRequest ",
+      "typeVersion": 4.5,
+      "position": [
+        1920,
+        0
+      ],
+      "id": "wf8-http-qdrant ",
+      "retryOnFail": true,
+      "maxTries": 2
+    },
+    {
+      "parameters": {
+        "authentication": "basicAuth ",
+        "operation": "move ",
+        "fileId": "={{ $json.nc_path }} ",
+        "targetPath": "=/RAG_Inbox/Processed/{{ $json.file_name }} "
+      },
+      "name": "Nextcloud: Move to Processed ",
+      "type": "n8n-nodes-base.nextCloud ",
+      "typeVersion": 1,
+      "position": [
+        2160,
+        0
+      ],
+      "id": "wf8-nc-move ",
+      "credentials": {
+        "nextCloudApi": {
+          "id": "NEXTCLOUD_CREDENTIAL_ID ",
+          "name": "Nextcloud Admin "
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Nextcloud: List Files ",
+            "type": "main ",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Nextcloud: List Files": {
+      "main": [
+        [
+          {
+            "node": "Code: Filter MD Files ",
+            "type": "main ",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Filter MD Files": {
+      "main": [
+        [
+          {
+            "node": "Split In Batches ",
+            "type": "main ",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split In Batches": {
+      "main": [
+        [
+          {
+            "node": "Nextcloud: Download File ",
+            "type": "main ",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Nextcloud: Download File": {
+      "main": [
+        [
+          {
+            "node": "Code: Chunking ",
+            "type": "main ",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Chunking": {
+      "main": [
+        [
+          {
+            "node": "HTTP: Embedding Bionic ",
+            "type": "main ",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP: Embedding Bionic": {
+      "main": [
+        [
+          {
+            "node": "Code: Prep Qdrant Payload ",
+            "type": "main ",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Prep Qdrant Payload": {
+      "main": [
+        [
+          {
+            "node": "HTTP: Qdrant Upsert ",
+            "type": "main ",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP: Qdrant Upsert": {
+      "main": [
+        [
+          {
+            "node": "Nextcloud: Move to Processed ",
+            "type": "main ",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1 "
+  },
+  "staticData": null,
+  "tags": []
+}

@@ -1,0 +1,375 @@
+{
+  "name": "2_Analisi_AI_MultiProvider_FIXED ",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "82405c6b-2b0b-42ad-91ae-a96d73c71296 ",
+      "name": "Execute Workflow Trigger ",
+      "type": "n8n-nodes-base.executeWorkflowTrigger ",
+      "typeVersion": 1,
+      "position": [
+        -464,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const aggregatedData = $json.aggregatedData;\nconst prompt =  `Agisci da assistente esecutivo personale. Analizza i dati aggregati forniti...`;\nconst baseBody = { messages: [{ role:  \"user \", content: prompt }], temperature: 0.3, stream: false };\nreturn [{ json: {\n  baseBody,\n  bionicBody: JSON.stringify({ ...baseBody, model:  \"qwen/qwen2.5-vl-7b \" }),\n  groqBody: JSON.stringify({ ...baseBody, model:  \"qwen/qwen3.8-27b \" }),\n  qwenBody: JSON.stringify({ ...baseBody, model:  \"qwen3.6-flash \" })\n}}]; "
+      },
+      "id": "97e7159a-e6a4-45fd-b21f-e77f822bd57e ",
+      "name": "Prepare Bodies ",
+      "type": "n8n-nodes-base.code ",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST ",
+        "url": "http://192.168.8.129:41343/v1/chat/completions ",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type ",
+              "value": "application/json "
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw ",
+        "rawContentType": "=application/json ",
+        "body": "=={{ $json.bionicBody }} ",
+        "options": {
+          "timeout": 45000
+        }
+      },
+      "id": "2efa71bc-dbbc-4501-b3d6-d335f3cfa47f ",
+      "name": "1. Bionic (locale) ",
+      "type": "n8n-nodes-base.httpRequest ",
+      "typeVersion": 4.5,
+      "position": [
+        0,
+        0
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ !!$json.choices  & & $json.choices[0]  & & $json.choices[0].message }} ",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "4436a684-1fa7-4c9e-9729-1946e2fbf059 ",
+      "name": "Bionic OK? ",
+      "type": "n8n-nodes-base.if ",
+      "typeVersion": 1,
+      "position": [
+        224,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST ",
+        "url": "https://api.groq.com/openai/v1/chat/completions ",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type ",
+              "value": "application/json "
+            },
+            {
+              "name": "Authorization ",
+              "value": "=Bearer {{ $env.GROQ_API_KEY }} "
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw ",
+        "rawContentType": "application/json ",
+        "body": "=={{ $json.groqBody }} ",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "745ac18b-ba8c-4659-9218-bc7fd5a8d5cf ",
+      "name": "2. Groq (free) ",
+      "type": "n8n-nodes-base.httpRequest ",
+      "typeVersion": 4.5,
+      "position": [
+        432,
+        208
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ !!$json.choices  & & $json.choices[0]  & & $json.choices[0].message }} ",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "6bd71b2a-4a4d-475f-8c0b-8485d200a8d0 ",
+      "name": "Groq OK? ",
+      "type": "n8n-nodes-base.if ",
+      "typeVersion": 1,
+      "position": [
+        640,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST ",
+        "url": "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1/chat/completions ",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type ",
+              "value": "application/json "
+            },
+            {
+              "name": "Authorization ",
+              "value": "=Bearer {{ $env.QWEN_API_KEY }} "
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw ",
+        "rawContentType": "application/json ",
+        "body": "=={{ $json.qwenBody }} ",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "4dba73c7-050c-4023-afc3-648e6c4c9ab4 ",
+      "name": "3. Qwen (Token Plan) ",
+      "type": "n8n-nodes-base.httpRequest ",
+      "typeVersion": 4.5,
+      "position": [
+        848,
+        400
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ !!$json.choices  & & $json.choices[0]  & & $json.choices[0].message }} ",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "aec601c4-c7e9-4cbb-b3af-82622a718bb3 ",
+      "name": "Qwen OK? ",
+      "type": "n8n-nodes-base.if ",
+      "typeVersion": 1,
+      "position": [
+        1072,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "let raw = $json.choices  & & $json.choices[0]  & & $json.choices[0].message ? $json.choices[0].message.content : '';\nraw = String(raw).replace(/`json\\n?/gi,'').replace(/`\\n?/gi,'').trim();\ntry {\n  const parsed = JSON.parse(raw);\n  if (!parsed.sentiment) parsed.sentiment = 'Non determinato';\n  if (!Array.isArray(parsed.categorie)) parsed.categorie = [];\n  if (!Array.isArray(parsed.azioni_operative)) parsed.azioni_operative = [];\n  if (!Array.isArray(parsed.urgenze)) parsed.urgenze = [];\n  return [{ json: { success: true, report: parsed, provider: $json.model || 'unknown' } }];\n} catch (e) {\n  return [{ json: { success: false, error: e.message, raw: raw.slice(0,500) } }];\n} "
+      },
+      "id": "cf1c3259-fd04-4828-8768-88847efa6429 ",
+      "name": "Validate  & Parse ",
+      "type": "n8n-nodes-base.code ",
+      "typeVersion": 2,
+      "position": [
+        1280,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": "6vJnOJ4PzmKfU3nO ",
+        "options": {}
+      },
+      "id": "c62b82df-313a-44d1-bc9d-43c5c93272dc ",
+      "name": "Call 3_Consegna_Notifica ",
+      "type": "n8n-nodes-base.executeWorkflow ",
+      "typeVersion": 1,
+      "position": [
+        1520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "708137568 ",
+        "text": "=⚠️ Tutti i provider AI hanno fallito. Controllare Bionic/Groq/Qwen.\n\nErrore: {{ $json.error || 'sconosciuto' }} ",
+        "additionalFields": {}
+      },
+      "id": "b6b37d5f-9df5-4336-b855-3ce336313fd6 ",
+      "name": "Error Notification (Telegram) ",
+      "type": "n8n-nodes-base.telegram ",
+      "typeVersion": 1.2,
+      "position": [
+        1520,
+        400
+      ],
+      "webhookId": "82234f12-6006-4cdd-ad17-2a180966ddab ",
+      "credentials": {
+        "telegramApi": {
+          "id": "yJLNGB3kJ2tS3b1W ",
+          "name": "Telegram account "
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Prepare Bodies ",
+            "type": "main ",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Bodies": {
+      "main": [
+        [
+          {
+            "node": "1. Bionic (locale) ",
+            "type": "main ",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Bionic (locale)": {
+      "main": [
+        [
+          {
+            "node": "Bionic OK? ",
+            "type": "main ",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bionic OK?": {
+      "main": [
+        [
+          {
+            "node": "Validate  & Parse ",
+            "type": "main ",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2. Groq (free) ",
+            "type": "main ",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Groq (free)": {
+      "main": [
+        [
+          {
+            "node": "Groq OK? ",
+            "type": "main ",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq OK?": {
+      "main": [
+        [
+          {
+            "node": "Validate  & Parse ",
+            "type": "main ",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "3. Qwen (Token Plan) ",
+            "type": "main ",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Qwen (Token Plan)": {
+      "main": [
+        [
+          {
+            "node": "Qwen OK? ",
+            "type": "main ",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qwen OK?": {
+      "main": [
+        [
+          {
+            "node": "Validate  & Parse ",
+            "type": "main ",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Notification (Telegram) ",
+            "type": "main ",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate  & Parse": {
+      "main": [
+        [
+          {
+            "node": "Call 3_Consegna_Notifica ",
+            "type": "main ",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1 ",
+    "binaryMode": "separate ",
+    "availableInMCP": false
+  },
+  "versionId": "77519810-fac6-4d28-8f66-c8a03e531e1a ",
+  "meta": {
+    "instanceId": "c48a3fda0169838b4d38a59adf3ff689edef6ce2d0cfca6afeaf2a9633e5ff8e "
+  },
+  "nodeGroups": [],
+  "id": "KjB6myW7zSPAiAo5 ",
+  "tags": []
+}
