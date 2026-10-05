@@ -1,4 +1,4 @@
-name: 🔒 CI Checks: JSON Validation & Secret Scanning
+name: CI Checks - JSON Validation and Secret Scanning
 
 on:
   push:
@@ -15,20 +15,20 @@ jobs:
 
       - name: Validate n8n Workflows JSON
         run: |
-          echo "🔍 Controllo sintassi JSON in workflows/..."
+          echo "Controllo sintassi JSON in workflows/..."
           for file in workflows/*.json; do
             if ! python3 -m json.tool "$file" > /dev/null 2>&1; then
-              echo "❌ ERRORE: $file non è un JSON valido!"
+              echo "ERRORE: $file non è un JSON valido!"
               exit 1
             fi
           done
-          echo "✅ Tutti i JSON sono validi."
+          echo "Tutti i JSON sono validi."
 
-      - name: Secret Scanning (Basic)
+      - name: Secret Scanning Basic
         run: |
-          echo "🔍 Scansione per secret esposti..."
+          echo "Scansione per secret esposti..."
           if grep -rEi "ghp_[a-zA-Z0-9]{36}|password\s*=\s*['\"][^'\"]+['\"]" --exclude-dir=.git .; then
-            echo "❌ ERRORE CRITICO: Trovato potenziale secret o token esposto!"
+            echo "ERRORE CRITICO: Trovato potenziale secret o token esposto!"
             exit 1
           fi
-          echo "✅ Nessuna stringa sospetta trovata."
+          echo "Nessuna stringa sospetta trovata."
