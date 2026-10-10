@@ -1,0 +1,206 @@
+{
+  "name": "WF6_RAG_Knowledge_Base_v2",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "rag",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Webhook RAG",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-480, 112],
+      "id": "4fbb4cfd-8dc6-4e5c-9618-eda1b24f364b",
+      "webhookId": "47da398c-38e7-4ae9-9c15-b6ca460c244e"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "set-question", "name": "question", "value": "={{ $json.body.question || $json.body.text || 'Domanda non specificata' }}", "type": "string" },
+            { "id": "set-session", "name": "session_id", "value": "={{ $json.body.session_id || 'anonymous' }}", "type": "string" },
+            { "id": "set-source", "name": "source", "value": "={{ $json.body.source || 'api' }}", "type": "string" }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Estrai Domanda",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-240, 112],
+      "id": "c1aa40bb-4e5e-456b-9523-dfb4c5459474"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.8.129:1234/v1/embeddings",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'text-embedding-bge-m3', input: $json.question }) }}",
+        "options": { "timeout": 30000 }
+      },
+      "name": "Embedding bge-m3 (Prometheus)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [0, 0],
+      "id": "fef31a13-f9b8-41b8-ac5d-54bd4ce0161b",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose", "version": 3 },
+          "conditions": [
+            {
+              "id": "155b0ed6-f816-4216-a8c4-a137382484cb",
+              "leftValue": "={{ ($json.embedding ? $json.embedding.length : ($json.data && $json.data[0] ? $json.data[0].embedding.length : 0)) }}",
+              "rightValue": 0,
+              "operator": { "type": "number", "operation": "gt" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "IF Embedding Locale OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [240, 0],
+      "id": "4d7d90eb-5eca-4090-882e-ca0e2719b8cc"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ answer: 'Embedder locale non disponibile o embedding vuoto: impossibile interrogare la Knowledge Base.', grounding: false, sources: [], chunk_count: 0, question: $('Estrai Domanda').item.json.question, error: 'embedder_unavailable' }) }}",
+        "options": { "responseCode": 503 }
+      },
+      "name": "Respond Errore Embedder",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [240, 320],
+      "id": "b7e3a1d2-4c5f-4a6b-8d9e-0f1a2b3c4d5e"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.8.124:6333/collections/trade_bot_knowledge/points/search",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ vector: $json.embedding || $json.data[0].embedding, limit: 5, with_payload: true, score_threshold: parseFloat($env.QDRANT_SCORE_THRESHOLD || '0.55') }) }}",
+        "options": { "timeout": 15000 }
+      },
+      "name": "Qdrant Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [528, 112],
+      "id": "7f05d918-d7db-4279-a815-9c2d32df0dcd",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "jsCode": "// === ESTRAI CONTESTO CON GROUNDING ===\nconst results = $json.result || [];\nconst question = $('Estrai Domanda').item.json.question;\n\n// Grounding assoluto: se 0 risultati, dichiara\nif (!results || results.length === 0) {\n  return [{\n    json: {\n      grounding_ok: false,\n      context: '',\n      sources: [],\n      question: question,\n      message: 'Nessun contesto pertinente trovato nella Knowledge Base.'\n    }\n  }];\n}\n\n// Estrai chunk + metadati\nconst chunks = results.map((r, i) => {\n  const p = r.payload || {};\n  return {\n    rank: i + 1,\n    score: r.score,\n    text: p.text_content || '',\n    source: p.source_reference || p.chunk_id || 'unknown',\n    type: p.document_type || 'unknown',\n    section: p.section_title || null\n  };\n});\n\n// Componi contesto numerato per l'LLM\nconst contextText = chunks.map(c =>\n  `[FONTE ${c.rank}] (score: ${c.score.toFixed(3)}, tipo: ${c.type})\\n${c.text}\\n`\n).join('\\n---\\n');\n\nreturn [{\n  json: {\n    grounding_ok: true,\n    context: contextText,\n    sources: chunks.map(c => ({ rank: c.rank, source: c.source, score: c.score })),\n    question: question,\n    chunk_count: chunks.length\n  }\n}];"
+      },
+      "name": "Estrai Contesto (Grounding)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [800, 112],
+      "id": "8afd7f99-d8ae-4c29-800b-281c367c333f"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.8.129:1234/v1/chat/completions",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: 'qwen2.5-coder-14b-instruct', messages: [ { role: 'system', content: 'Sei CORTEX, Knowledge Architect del cluster TRIDENT. Rispondi ESCLUSIVAMENTE basandoti sul contesto fornito. Se il contesto è vuoto o insufficiente, dichiara: \"Nessun contesto pertinente trovato nella Knowledge Base\". Cita le fonti con [FONTE N]. Rispondi in italiano, conciso e tecnico.' }, { role: 'user', content: $json.grounding_ok ? ('CONTESTO:\\n' + $json.context + '\\n\\nDOMANDA: ' + $json.question) : ('DOMANDA: ' + $json.question + '\\n\\n(Nessun contesto disponibile)') } ], temperature: 0.3, max_tokens: 500 }) }}",
+        "options": { "timeout": 120000 }
+      },
+      "name": "Qwen CORTEX (RAG Locale)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [1088, 112],
+      "id": "560bf8b7-7b41-4d93-9881-ccbd96c74827",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 2000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.QWEN_BASE_URL }}/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.QWEN_API_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: $env.CORTEX_AGENT_ID || 'qwen3.8-flash', messages: [ { role: 'system', content: 'Sei CORTEX, Knowledge Architect del cluster TRIDENT. Rispondi ESCLUSIVAMENTE basandoti sul contesto fornito. Se il contesto è vuoto o insufficiente, dichiara: \"Nessun contesto pertinente trovato nella Knowledge Base\". Cita le fonti con [FONTE N]. Rispondi in italiano, conciso e tecnico.' }, { role: 'user', content: $json.grounding_ok ? ('CONTESTO:\\n' + $json.context + '\\n\\nDOMANDA: ' + $json.question) : ('DOMANDA: ' + $json.question + '\\n\\n(Nessun contesto disponibile)') } ], temperature: 0.3, max_tokens: 800 }) }}",
+        "options": { "timeout": 60000 }
+      },
+      "name": "Qwen Cloud (Fallback Chat)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [1088, 320],
+      "id": "a8b02eb9-3f80-4825-89e3-47c2a3e504ad",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ answer: $json.choices && $json.choices[0] ? $json.choices[0].message.content : 'Errore generazione risposta', grounding: $('Estrai Contesto (Grounding)').item.json.grounding_ok, sources: $('Estrai Contesto (Grounding)').item.json.sources || [], chunk_count: $('Estrai Contesto (Grounding)').item.json.chunk_count || 0, question: $('Estrai Domanda').item.json.question }) }}",
+        "options": { "responseCode": 200 }
+      },
+      "name": "Respond RAG",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1360, 112],
+      "id": "53b360b4-0fb1-4a3b-b2dd-2971c34ead79"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook RAG": { "main": [[{ "node": "Estrai Domanda", "type": "main", "index": 0 }]] },
+    "Estrai Domanda": { "main": [[{ "node": "Embedding bge-m3 (Prometheus)", "type": "main", "index": 0 }]] },
+    "Embedding bge-m3 (Prometheus)": {
+      "main": [
+        [{ "node": "IF Embedding Locale OK?", "type": "main", "index": 0 }],
+        [{ "node": "Respond Errore Embedder", "type": "main", "index": 0 }]
+      ]
+    },
+    "IF Embedding Locale OK?": {
+      "main": [
+        [{ "node": "Qdrant Search", "type": "main", "index": 0 }],
+        [{ "node": "Respond Errore Embedder", "type": "main", "index": 0 }]
+      ]
+    },
+    "Qdrant Search": { "main": [[{ "node": "Estrai Contesto (Grounding)", "type": "main", "index": 0 }]] },
+    "Estrai Contesto (Grounding)": { "main": [[{ "node": "Qwen CORTEX (RAG Locale)", "type": "main", "index": 0 }]] },
+    "Qwen CORTEX (RAG Locale)": {
+      "main": [
+        [{ "node": "Respond RAG", "type": "main", "index": 0 }],
+        [{ "node": "Qwen Cloud (Fallback Chat)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Qwen Cloud (Fallback Chat)": {
+      "main": [
+        [{ "node": "Respond RAG", "type": "main", "index": 0 }],
+        [{ "node": "Respond RAG", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "meta": { "instanceId": "c48a3fda0169838b4d38a59adf3ff689edef6ce2d0cfca6afeaf2a9633e5ff8e" },
+  "tags": []
+}
