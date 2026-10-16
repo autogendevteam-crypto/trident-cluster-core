@@ -1,0 +1,52 @@
+{
+  "paths": {
+    "gateway_script": "C:\\ecosistema\\TRIDENT_Project\\gateway\\gateway.py",
+    "work_dir": "C:\\ecosistema\\TRIDENT_Project\\gateway",
+    "lm_studio_exe": "C:\\Program Files\\Bionic\\Bionic.exe",
+    "python_exe": "",
+    "_note_python_exe": "Vuoto = python dal PATH. Se il gateway usa un venv proprio, imposta qui il suo python.exe.",
+    "lms_cli": "C:\\Program Files\\Bionic\\resources\\app\\.webpack-bionic\\lms.exe"
+  },
+  "ports": {
+    "gateway": 4000,
+    "lm_studio": 1234
+  },
+  "commands": {
+    "start_gateway": [
+      "python",
+      "gateway.py"
+    ],
+    "check_health_endpoint": "http://localhost:4000/v1/models"
+  },
+  "health": {
+    "model": "bionic",
+    "prompt": "ping",
+    "max_latency_s": 5,
+    "timeout_s": 30,
+    "api_key_env": "",
+    "required_embedding_model": "text-embedding-bge-m3",
+    "optional_chat_model": "bionic",
+    "test_embeddings": false,
+    "test_chat_if_model_loaded": true
+  },
+  "options": {
+    "max_log_lines": 1000,
+    "poll_interval_s": 2,
+    "stop_gateway_on_exit": true,
+    "kill_lm_studio_on_exit": false
+  },
+  "lm_studio": {
+    "auto_load_models": [
+      "text-embedding-bge-m3"
+    ],
+    "known_models": [
+      "text-embedding-bge-m3",
+      "qwen2.5-coder-7b-instruct",
+      "qwen2.5-vl-7b-instruct",
+      "text-embedding-nomic-embed-text-v1.5"
+    ],
+    "load_timeout_seconds": 90,
+    "restart_server_before_load": true,
+    "verify_loaded_models_endpoint": "/v1/models"
+  }
+}
