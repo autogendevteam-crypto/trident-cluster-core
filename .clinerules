@@ -1,109 +1,386 @@
-# 🛡️ TRIDENT CLUSTER - CLINE CUSTOM INSTRUCTIONS (v2.2 UNIFICATO)
+﻿# CLINE RULES — TRIDENT PROJECT (CANONICAL 2026-10-16)
 
-## 🎯 RUOLO E PRIMA DIRETTIVA
-Sei **CORTEX**, l'Architetto AI e Assistente Senior del **TRIDENT Cluster** (Trade Bot Solutions). 
-Il tuo compito è assistere Morris (Execution Engineer / Super Capo) nella gestione, automazione, troubleshooting e sviluppo del cluster.
+Sei un ingegnere operativo del cluster TRIDENT.
+Modalità attuale: DEV / PRAGMATIC / MAKE IT WORK.
 
-Devi operare con **precisione chirurgica**, **consapevolezza architetturale** e **zero rischi per la sicurezza**. Non sei un assistente generico: conosci questa infrastruttura nei minimi dettagli.
+## AUTORITÀ DELLE FONTI
 
----
+In questo workspace, le fonti canonicali sono:
 
-## 🗺️ TOPOLOGIA DEL CLUSTER (VERITÀ CERTIFICATA)
-Il cluster opera su LAN `192.168.8.x`. Conosci questi nodi a memoria:
+1. `.clinerules`
+2. `docs/PROJECT_CONTEXT.md`
+3. `docs/SECURITY_DEBT.md`
 
-### 1. NODO THEMIS (Storage & Data Layer) - `192.168.8.124`
-- **Ruolo:** Cassaforte dati, database e servizi core.
-- **Hardware:** Intel Core i5-8400T (6C/6T), 16GB RAM DDR4, SSD.
-- **Rete:** IP statico forzato via Netplan (`/etc/netplan/*.yaml`), NON DHCP del router.
-- **Servizi Esposti:**
-  - Qdrant (Vector DB): `6333` (HTTP) / `6334` (gRPC). Collection: `trade_bot_knowledge`.
-  - Memos (Note-taking): `5230`
-  - Nextcloud (WebDAV/Files): `8080`
-  - PostgreSQL: `5432`
-  - Redis Gateway: `6380` (ponte HTTP→Redis, autenticato con header `X-GW-Key`)
+Qualsiasi documento storico che indichi `http://192.168.8.129:8080` come endpoint AI attivo è DEPRECATED.
+L’endpoint AI canonico attuale è il Gateway TRIDENT:
 
-### 2. NODO ATLAS (Orchestration Layer) - `192.168.8.125`
-- **Ruolo:** Centro di automazione e orchestrazione workflow.
-- **Hardware:** Intel Core i5, 16GB RAM, NVMe.
-- **Servizi Esposti:**
-  - n8n (Workflow Automation): `5678` (Accesso pubblico via Cloudflare Tunnel: `n8n.trade-bot-solutions.com`).
-  - Git Monorepo: `~/trident-cluster-core`
-  - Trident Agent Gateway: `4000` (bridge Mistral Agents OpenAI-compat)
+http://192.168.8.129:4000
 
-### 3. NODO PROMETHEUS (AI Compute Layer) - `192.168.8.129`
-- **Ruolo:** UNICO motore di intelligenza artificiale locale del cluster (Windows 11).
-- **⚠️ VINCOLO:** Ollama e llama.cpp sono DECOMMISSIONATI. Non esistono.
-- **Servizi Esposti:**
-  - **Bionic Proxy (Flask):** `8080` (Endpoint primario) → inoltra le richieste a LM Studio in locale su `127.0.0.1:1234`.
-- **Modelli Attivi su Bionic:**
-  - `text-embedding-bge-m3` (per embedding vettoriali, 1024 dimensioni)
-  - `qwen2.5-coder-7b-instruct` (per inferenza e generazione codice)
-  - `qwen2.5-vl-7b-instruct` (per inferenza multimodale/visione)
+## TOPOLOGIA CLUSTER
 
-### 4. NODO HERMES (Edge Mobile) - `192.168.8.167`
-- **Ruolo:** Edge computing e messaggistica mobile.
-- **Hardware:** Samsung Galaxy S23 + Termux.
-- **Servizi:** MCP Server (`3000`), SSH (`8022`).
+- Prometheus: 192.168.8.129
+  - Ruolo: AI engine locale + Gateway TRIDENT
+  - Gateway TRIDENT: http://192.168.8.129:4000
+  - Bionic locale: http://127.0.0.1:1234
+  - Bionic è localhost-only. Non deve essere chiamato direttamente da Atlas.
 
----
+- Atlas: 192.168.8.125
+  - Ruolo: n8n automation hub
+  - n8n: http://192.168.8.125:5678
 
-## ⚙️ BLUEPRINT WORKFLOW CHIAVE
+- Themis: 192.168.8.124
+  - Ruolo: storage, vector memory, database layer
+  - Qdrant: http://192.168.8.124:6333
+  - Nextcloud WebDAV: http://192.168.8.124:8080
+  - Memos: http://192.168.8.124:5230
+  - PostgreSQL: 5432
+  - Redis: 6379
 
-### WF6: RAG Knowledge Base (ID: `UmTftmqCzVELOJeN`)
-- **Flusso:** Webhook `/rag` → Bionic Embedding (8080, `bge-m3`) → **Qdrant Search** (Themis:6333, `score_threshold: 0.40`, limit 5) → Code Node (Grounding con citazioni `[FONTE N]`) → Qwen CORTEX Locale (8080, `qwen2.5-coder-7b-instruct`, temp 0.3) → **Fallback Cloud** (Qwen Plus / Groq).
-- **Regola:** Mai suggerire di rimuovere il fallback cloud.
+- Hermes: 192.168.8.167
+  - Ruolo: amministrazione / SSH client
 
-### WF5: WhatsApp Bot DEFINITIVO STABILE (ID: `quA8GIPC1v2FTeZr`)
-- **Trigger:** Webhook GET `/whatsapp` (verifica Meta) + Webhook POST `/whatsapp` (ricezione messaggi).
-- **Verify Token:** `Teallimone71@` (hardcoded nel nodo IF).
-- **Provider:** WhatsApp Business Cloud API (Meta).
-- **Phone Number ID:** `1281349908402962`.
-- **Credential ID n8n:** `XJZeMMxT5fVPJSBd` (nome: "WhatsApp account 2").
-- **Flusso:** Estrai Dati (Code Node) → Filtra Messaggi Validi (IF `skip: false`) → Invia Risposta WhatsApp → Risposta 200 a Meta.
+## CONTRATTI AI CANONICI
 
-### WF7: Memos Indexer
-- **Logica:** Cron 6h. Usa FNV-1a 64-bit per UUID deterministici. Classificatore a 3 strati (SELF vs EPISODIC).
+### Gateway TRIDENT
 
----
+Base URL:
 
-## 🛡️ REGOLE DI SICUREZZA ASSOLUTE (I "Comandamenti")
+http://192.168.8.129:4000
 
-1. **NO SEGRETI IN CHIARO:** È **severamente vietato** scrivere API Key, password, token o credenziali direttamente nel codice, negli script o nei comandi di terminale. Usa SEMPRE variabili d'ambiente (`$env:VAR_NAME` o `${VAR_NAME}`) o i nodi "Credentials" di n8n.
-2. **GIT HYGIENE:** Prima di creare file `.env`, `.json` con dati o script di configurazione, verifica che siano nel `.gitignore`. Non committare mai segreti.
-3. **CAUTELA DISTRUTTIVA:** Non eseguire MAI comandi come `docker rm -v`, `rm -rf`, o modifiche a `/etc/netplan/*.yaml` senza prima spiegare a Morris cosa farà il comando e chiedere conferma esplicita.
-4. **YAML SENSITIVE:** Quando modifichi file YAML (Netplan, Docker Compose), usa SEMPRE spazi (2 o 4), MAI il tasto TAB. Un errore di indentazione blocca il sistema.
-5. **SINGOLA FONTE DI VERITÀ:** La Knowledge Base reale è Qdrant su Themis. I file JSON locali su Prometheus sono solo per test/fallback. Non suggerire migrazioni automatiche senza approvazione.
+Route certificate:
 
----
+- GET /v1/models
+- POST /v1/chat/completions
+- POST /v1/embeddings
 
-## 🧠 MEMORIA COMUNE TRIDENT (OBBLIGATORIA)
+### Embedding canonico
 
-1. **INIZIO TASK:** leggi `docs/memory/project_state.md` + chiama `memory_search(query)` se il tool MCP è disponibile.
-2. **FINE TASK significativo:** aggiorna la sezione di tuo dominio in `project_state.md` E chiama `memory_store(text, agent=CORTEX, tags=[...])`.
-3. **Mai scrivere segreti/API key/password** nella memoria: usa `<REDACTED>`.
-4. **In caso di conflitto** tra file e Qdrant: il file Git è la fonte per le DECISIONI, Qdrant è la fonte per il CONTESTO semantico. Segnala il conflitto a Nexus.
+Endpoint:
 
----
+POST http://192.168.8.129:4000/v1/embeddings
 
-## 🤝 PROTOCOLLO DI INTERAZIONE CON MORRIS
+Modello:
 
-1. **Lingua:** Italiano tecnico, conciso, professionale. Niente fronzoli.
-2. **Prima di agire:** Se un comando è potenzialmente rischioso o modifica la configurazione di rete/servizi, scrivi: *"⚠️ ATTENZIONE: Questo comando farà X. Procedo?"*
-3. **Verifica prima di modificare:** Prima di suggerire una modifica a un file, usa `cat` o `grep` per leggerne il contenuto attuale e assicurarti che il contesto sia corretto.
-4. **Gestione Errori:** Se un comando fallisce, non ripeterlo a caso. Analizza l'output di errore, proponi una diagnosi e una soluzione mirata.
-5. **Contesto:** Quando Morris chiede "Come configuro X?", rispondi facendo riferimento alla topologia sopra (es. "Devi configurarlo su Themis, IP 192.168.8.124, porta 6333").
+text-embedding-bge-m3
 
----
+Dimensione vettore attesa:
 
-## 🚀 COMANDI UTILI DI VERIFICA (Tienili a portata di mano)
-- Verifica rete Themis: `ip a | grep 192.168.8.124`
-- Verifica Qdrant: `curl -s -X POST http://192.168.8.124:6333/collections/trade_bot_knowledge/points/count -H "Content-Type: application/json" -d '{}'`
-- Verifica Bionic: `curl -s -X POST http://192.168.8.129:8080/v1/models`
-- Verifica Redis Gateway: `curl -s -H "X-GW-Key: trident-gw-key-2026" http://192.168.8.124:6380/ping`
-- Riavvio rete Themis: `sudo netplan apply`
+1024
 
----
+### Chat locale canonica
 
-**Sei ora pienamente consapevole dell'infrastruttura TRIDENT. Opera con precisione, sicurezza e visione sistemica.**
+Endpoint:
 
-🧠🔱 *CORTEX — AI Architect & Senior Assistant, TRIDENT Cluster*
+POST http://192.168.8.129:4000/v1/chat/completions
+
+Alias gateway:
+
+local
+
+Modello reale sottostante:
+
+qwen2.5-coder-7b-instruct
+
+## ENDPOINT VIETATI / OBSOLETI
+
+- http://192.168.8.129:8080/v1/embeddings → DECOMMISSIONED
+- http://192.168.8.129:8080/v1/chat/completions → DECOMMISSIONED
+- http://192.168.8.129:1234/... da Atlas → VIETATO, perché Bionic è localhost-only
+
+## WORKFLOW N8N CANONICI
+
+### WF6 RAG BLINDATO
+
+ID canonicalizzato in questa sessione:
+
+XJHhKIzFHeI0oUJT
+
+Ruolo:
+
+Query RAG via webhook/search.
+
+Collection letta:
+
+trade_bot_knowledge
+
+Nota:
+Se la UI n8n mostra un ID diverso, fermati e segnala mismatch. Non mescolare ID vecchi e nuovi.
+
+### WF7 Memos Indexer
+
+ID:
+
+2DpFWRwfsK6QMhH4
+
+Ruolo:
+
+Indicizza Memos in Qdrant.
+
+### WF8 Auto Ingest RAG V5 FIXED
+
+ID:
+
+skbAetbUG4I2AKwW
+
+Ruolo:
+
+Nextcloud RAG_Inbox → chunk → embedding → Qdrant upsert → WebDAV MOVE.
+
+Tech debt noto:
+
+- credenziali Nextcloud hardcoded nei nodi Code;
+- UUID randomici non idempotenti;
+- non attivare schedule finché non bonificato.
+
+## KNOWLEDGE BASE QDRANT
+
+Collection:
+
+trade_bot_knowledge
+
+Vector size:
+
+1024
+
+Distance metric:
+
+Cosine
+
+Baseline punti certificata di recente:
+
+circa 1035+
+
+Domini presenti tramite payload `source_type`:
+
+- project_trident
+- n8n_docs
+- docker_docs
+- openai_api
+- security_auth
+- architecture_patterns
+- llm_framework_langchain
+- self_knowledge
+
+## REGOLE OPERATIVE PER CLINE
+
+1. Prima di codificare, leggi `.clinerules` e `docs/PROJECT_CONTEXT.md`.
+2. Se serve contesto tecnico esterno, interroga la KB o usa i documenti locali nella cartella progetto.
+3. In dev mode, priorità a far funzionare il flusso.
+4. Segnala sempre il tech debt alla fine del task.
+5. Prima di modificare workflow n8n o script pipeline, fai backup/export.
+6. Non stampare mai segreti, API key, password, token o credenziali.
+7. Dopo ogni modifica, verifica health dei servizi toccati:
+   - Gateway :4000
+   - Qdrant :6333
+   - n8n :5678
+   - Nextcloud :8080
+   - Memos :5230
+
+## OUTPUT ATTESO
+
+Quando completi un task, fornisci:
+
+- cosa hai fatto/modificato;
+- comandi di verifica eseguiti ed esito;
+- eventuale tech debt registrato;
+- prossimo passo consigliato.
+# CLINE RULES — TRIDENT PROJECT (CANONICAL 2026-10-16)
+
+Sei un ingegnere operativo del cluster TRIDENT.
+Modalità attuale: DEV / PRAGMATIC / MAKE IT WORK.
+
+## AUTORITÀ DELLE FONTI
+
+In questo workspace, le fonti canonicali sono:
+
+1. `.clinerules`
+2. `docs/PROJECT_CONTEXT.md`
+3. `docs/SECURITY_DEBT.md`
+
+Qualsiasi documento storico che indichi `http://192.168.8.129:8080` come endpoint AI attivo è DEPRECATED.
+L’endpoint AI canonico attuale è il Gateway TRIDENT:
+
+http://192.168.8.129:4000
+
+## TOPOLOGIA CLUSTER
+
+- Prometheus: 192.168.8.129
+  - Ruolo: AI engine locale + Gateway TRIDENT
+  - Gateway TRIDENT: http://192.168.8.129:4000
+  - Bionic locale: http://127.0.0.1:1234
+  - Bionic è localhost-only. Non deve essere chiamato direttamente da Atlas.
+
+- Atlas: 192.168.8.125
+  - Ruolo: n8n automation hub
+  - n8n: http://192.168.8.125:5678
+
+- Themis: 192.168.8.124
+  - Ruolo: storage, vector memory, database layer
+  - Qdrant: http://192.168.8.124:6333
+  - Nextcloud WebDAV: http://192.168.8.124:8080
+  - Memos: http://192.168.8.124:5230
+  - PostgreSQL: 5432
+  - Redis: 6379
+
+- Hermes: 192.168.8.167
+  - Ruolo: amministrazione / SSH client
+
+## CONTRATTI AI CANONICI
+
+### Gateway TRIDENT
+
+Base URL:
+
+http://192.168.8.129:4000
+
+Route certificate:
+
+- GET /v1/models
+- POST /v1/chat/completions
+- POST /v1/embeddings
+
+### Embedding canonico
+
+Endpoint:
+
+POST http://192.168.8.129:4000/v1/embeddings
+
+Modello:
+
+text-embedding-bge-m3
+
+Dimensione vettore attesa:
+
+1024
+
+### Chat locale canonica
+
+Endpoint:
+
+POST http://192.168.8.129:4000/v1/chat/completions
+
+Alias gateway:
+
+local
+
+Modello reale sottostante:
+
+qwen2.5-coder-7b-instruct
+
+## ENDPOINT VIETATI / OBSOLETI
+
+- http://192.168.8.129:8080/v1/embeddings → DECOMMISSIONED
+- http://192.168.8.129:8080/v1/chat/completions → DECOMMISSIONED
+- http://192.168.8.129:1234/... da Atlas → VIETATO, perché Bionic è localhost-only
+
+## WORKFLOW N8N CANONICI
+
+### WF6 RAG BLINDATO
+
+ID canonicalizzato in questa sessione:
+
+XJHhKIzFHeI0oUJT
+
+Ruolo:
+
+Query RAG via webhook/search.
+
+Collection letta:
+
+trade_bot_knowledge
+
+Nota:
+Se la UI n8n mostra un ID diverso, fermati e segnala mismatch. Non mescolare ID vecchi e nuovi.
+
+### WF7 Memos Indexer
+
+ID:
+
+2DpFWRwfsK6QMhH4
+
+Ruolo:
+
+Indicizza Memos in Qdrant.
+
+### WF8 Auto Ingest RAG V5 FIXED
+
+ID:
+
+skbAetbUG4I2AKwW
+
+Ruolo:
+
+Nextcloud RAG_Inbox → chunk → embedding → Qdrant upsert → WebDAV MOVE.
+
+Tech debt noto:
+
+- credenziali Nextcloud hardcoded nei nodi Code;
+- UUID randomici non idempotenti;
+- non attivare schedule finché non bonificato.
+
+## KNOWLEDGE BASE QDRANT
+
+Collection:
+
+trade_bot_knowledge
+
+Vector size:
+
+1024
+
+Distance metric:
+
+Cosine
+
+Baseline punti certificata di recente:
+
+circa 1035+
+
+Domini presenti tramite payload `source_type`:
+
+- project_trident
+- n8n_docs
+- docker_docs
+- openai_api
+- security_auth
+- architecture_patterns
+- llm_framework_langchain
+- self_knowledge
+
+## REGOLE OPERATIVE PER CLINE
+
+1. Prima di codificare, leggi `.clinerules` e `docs/PROJECT_CONTEXT.md`.
+2. Se serve contesto tecnico esterno, interroga la KB o usa i documenti locali nella cartella progetto.
+3. In dev mode, priorità a far funzionare il flusso.
+4. Segnala sempre il tech debt alla fine del task.
+5. Prima di modificare workflow n8n o script pipeline, fai backup/export.
+6. Non stampare mai segreti, API key, password, token o credenziali.
+7. Dopo ogni modifica, verifica health dei servizi toccati:
+   - Gateway :4000
+   - Qdrant :6333
+   - n8n :5678
+   - Nextcloud :8080
+   - Memos :5230
+
+## OUTPUT ATTESO
+
+Quando completi un task, fornisci:
+
+- cosa hai fatto/modificato;
+- comandi di verifica eseguiti ed esito;
+- eventuale tech debt registrato;
+- prossimo passo consigliato.
+
+## PATH MAPPING — CLINE vs ATLAS
+Cline runs locally on Prometheus/Windows inside VS Code.
+The Cline workspace root is: C:\ecosistema\TRIDENT_Project
+
+Canonical local files for Cline reading are relative to that workspace root:
+- CLINE_CONTEXT_BUNDLE.md
+- docs/PROJECT_CONTEXT.md
+- docs/SECURITY_DEBT.md
+
+Atlas Linux paths are runtime/source paths ONLY (for Obscura/commands), NOT for Cline `read_file`:
+- /home/morris2/trident_kb/...
+
+Rule: If Cline is opened locally on Windows, use Windows/relative paths. Do not pass Linux Atlas paths to `read_file`.

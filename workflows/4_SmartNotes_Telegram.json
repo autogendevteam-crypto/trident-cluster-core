@@ -1,0 +1,199 @@
+{
+  "name": "4_SmartNotes_Telegram",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -720,
+        160
+      ],
+      "id": "3f06353b-00e3-44f0-b2f5-9287205a24aa",
+      "webhookId": "2064016c-36ba-463f-81b2-b43a970bf4bc",
+      "credentials": {
+        "telegramApi": {
+          "id": "qP4ZETl1TzsKHYOJ",
+          "name": "Smart Notes Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const msg = $input.first().json.message || {};\nconst userId = String((msg.from && msg.from.id) ? msg.from.id : '');\nconst firstName = (msg.from && msg.from.first_name) ? msg.from.first_name : 'Utente';\nconst text = msg.text || '';\n\nconst userDirectory = {\n  '708137568': { nome: 'Morris', cartella: '/01_Personal/SmartNotes', calendario: 'cal-morris' },\n  '6249861407': { nome: 'Angela', cartella: '/05_Famiglia_Team/Angela_Badante/SmartNotes', calendario: 'cal-angela' },\n  'PENDING_GIOVANNA': { nome: 'Giovanna', cartella: '/05_Famiglia_Team/Giovanna/SmartNotes', calendario: 'cal-giovanna' }\n};\n\nconst profile = userDirectory[userId];\n\nreturn [{\n  json: {\n    authorized: !!profile,\n    userId: userId,\n    authorName: profile ? profile.nome : firstName,\n    content: text,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "name": "Auth & Firma Nota",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -480,
+        160
+      ],
+      "id": "5a9b340f-a839-49f0-9f43-acf36c897fd6"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.authorized }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "Autorizzato?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -240,
+        160
+      ],
+      "id": "000ef787-c752-4525-837c-088becd1b6cf"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.8.124:5230/api/v1/memos",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ content: '📥 Telegram (' + $json.authorName + '): ' + $json.content + ' #telegram' }) }}",
+        "options": {}
+      },
+      "name": "Crea Nota su Memos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        0,
+        0
+      ],
+      "id": "939afa3b-2f65-4788-8960-b25e8a4dff1e",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "JxijNUpodecXu5wi",
+          "name": "Memos API Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.from.id }}",
+        "text": "✅ Nota salvata su Memos, {{ $('Auth & Firma Nota').item.json.authorName }}!",
+        "additionalFields": {}
+      },
+      "name": "Conferma Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        0
+      ],
+      "id": "6188411c-939e-4ca7-8c11-f45af4e4cb2f",
+      "webhookId": "5b61248e-94d1-4dcc-8a25-c1fe4cb696c6",
+      "credentials": {
+        "telegramApi": {
+          "id": "qP4ZETl1TzsKHYOJ",
+          "name": "Smart Notes Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.from.id }}",
+        "text": "🚫 Non sei autorizzato a usare questo bot.",
+        "additionalFields": {}
+      },
+      "name": "Blocco Non Autorizzati",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        304
+      ],
+      "id": "eb98210e-3f87-4688-826f-f36c10560161",
+      "webhookId": "ddca629f-aff6-437d-902b-c02de5bd9803",
+      "credentials": {
+        "telegramApi": {
+          "id": "qP4ZETl1TzsKHYOJ",
+          "name": "Smart Notes Bot"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Auth & Firma Nota",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auth & Firma Nota": {
+      "main": [
+        [
+          {
+            "node": "Autorizzato?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Autorizzato?": {
+      "main": [
+        [
+          {
+            "node": "Crea Nota su Memos",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Blocco Non Autorizzati",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crea Nota su Memos": {
+      "main": [
+        [
+          {
+            "node": "Conferma Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "fd951ef5-d598-467e-8925-54c161293c62",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "c48a3fda0169838b4d38a59adf3ff689edef6ce2d0cfca6afeaf2a9633e5ff8e"
+  },
+  "nodeGroups": [],
+  "id": "O7o7k3589khmgPaI",
+  "tags": []
+}

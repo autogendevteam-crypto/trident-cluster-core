@@ -1,0 +1,210 @@
+{
+  "name": "2_Analisi_AI_Qwen_Cloud",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "b66e8060-db10-49e1-acca-6969c2a7b057",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        -768,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const aggregatedData = $json.aggregatedData;\n\nconst body = {\n  model: \"qwen3.6-flash\",\n  messages: [\n    {\n      role: \"user\",\n      content: `Agisci da assistente esecutivo personale. Analizza i dati aggregati forniti.\n\nIl tuo compito è:\n1. Identificare le informazioni rilevanti e i task pendenti.\n2. Categorizzare per macro-aree (es. Trading, Lavoro, Personale, Urgenze).\n3. Estrarre una lista di Azioni Operative (To-Do).\n4. Valutare il sentiment generale.\n\nRispondi SOLO con un oggetto JSON valido contenente le seguenti chiavi: sentiment, categorie, azioni_operative, urgenze.\n\nDATI DA ANALIZZARE:\n${JSON.stringify(aggregatedData)}`\n    }\n  ],\n  temperature: 0.3,\n  stream: false\n};\n\nreturn [{ json: { body: JSON.stringify(body) } }];"
+      },
+      "id": "98427644-3730-4985-a591-d32ac77a503c",
+      "name": "Prepare Request Body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -640,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.QWEN_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "=Expression",
+        "body": "=={{ $json.body }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "74c7d8ec-3a9e-4a0e-836f-774814c4d188",
+      "name": "Qwen LLM (HTTP Request)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -416,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "let rawContent = '';\ntry {\n  if ($json.choices && $json.choices[0] && $json.choices[0].message) {\n    rawContent = $json.choices[0].message.content;\n  } else if ($json.error) {\n    throw new Error('Errore Qwen API: ' + JSON.stringify($json.error));\n  } else {\n    throw new Error('Formato risposta non riconosciuto: ' + JSON.stringify($json).slice(0, 200));\n  }\n\n  rawContent = rawContent.replace(/```json\\n?/gi, '').replace(/```\\n?/gi, '').trim();\n\n  const parsed = JSON.parse(rawContent);\n\n  if (!parsed.sentiment) parsed.sentiment = 'Non determinato';\n  if (!Array.isArray(parsed.categorie)) parsed.categorie = [];\n  if (!Array.isArray(parsed.azioni_operative)) parsed.azioni_operative = [];\n  if (!Array.isArray(parsed.urgenze)) parsed.urgenze = [];\n\n  return [{ json: { success: true, report: parsed } }];\n\n} catch (e) {\n  return [{ json: {\n    success: false,\n    error: e.message,\n    rawContent: (rawContent || JSON.stringify($json)).slice(0, 500)\n  }}];\n}"
+      },
+      "id": "11905b96-dbd9-4f0c-a264-d6e4c600deb1",
+      "name": "Validate & Parse AI Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -208,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.success }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "01bf6a02-d456-4c60-b20d-07a6bf107429",
+      "name": "Check Parse Success",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        16,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": "6vJnOJ4PzmKfU3nO",
+        "options": {}
+      },
+      "id": "68b8c639-7486-49da-a402-1da52dcea48e",
+      "name": "Call Delivery Workflow",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        240,
+        -176
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "708137568",
+        "text": "=⚠️ Errore nell'analisi AI (Qwen Cloud)\n\nErrore: {{ $json.error }}\n\nContenuto grezzo (primi 500 caratteri):\n```\n{{ $json.rawContent }}\n```",
+        "additionalFields": {}
+      },
+      "id": "f18a1fe3-fd73-45ff-b664-e2b9db071b40",
+      "name": "Error Notification (Telegram)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        32
+      ],
+      "webhookId": "a504b5a5-27f9-4138-ae13-fa8bc8ae1735",
+      "credentials": {
+        "telegramApi": {
+          "id": "yJLNGB3kJ2tS3b1W",
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Prepare Request Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Request Body": {
+      "main": [
+        [
+          {
+            "node": "Qwen LLM (HTTP Request)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qwen LLM (HTTP Request)": {
+      "main": [
+        [
+          {
+            "node": "Validate & Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate & Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Check Parse Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Parse Success": {
+      "main": [
+        [
+          {
+            "node": "Call Delivery Workflow",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Notification (Telegram)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "a04b23db-496d-4f3b-9d0f-a73ae8e6c733",
+  "meta": {
+    "instanceId": "c48a3fda0169838b4d38a59adf3ff689edef6ce2d0cfca6afeaf2a9633e5ff8e"
+  },
+  "nodeGroups": [],
+  "id": "ZupztVUdTtlecyO3",
+  "tags": []
+}

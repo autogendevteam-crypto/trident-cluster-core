@@ -1,0 +1,301 @@
+{
+  "name": "0_Telegram_Ingest_Note",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -2256,
+        736
+      ],
+      "id": "85d04aff-d3f9-45ff-aa90-dfa4351c2857",
+      "webhookId": "wf0-telegram-ingest",
+      "credentials": {
+        "telegramApi": {
+          "id": "IVshL61QPjLHP1iv",
+          "name": "Ingest_Note"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst chat = item.message?.chat || item.chat;\nconst text = item.message?.text || item.text || '';\nconst messageId = item.message?.message_id || item.message_id;\n\nif (!chat || !chat.id) {\n  return { json: { isAuthorized: false, reason: 'Dati mancanti' } };\n}\nif (chat.id !== 708137568) {\n  return { json: { isAuthorized: false, reason: 'Non autorizzato', chatId: chat.id, messageId: messageId } };\n}\n\nconst match = text.match(/^\\/(trade|lavoro|urgente|progetti)(?:\\s+|$)/i);\nlet tag = 'PERSONALE';\nlet cleanText = text;\nif (match) {\n  tag = match[1].toUpperCase();\n  cleanText = text.replace(match[0], '').trim();\n}\n\nconst now = new Date();\nconst formattedLine = `[${tag}] ${now.toISOString().slice(0, 10)} ${now.toTimeString().slice(0, 5)}: ${cleanText}`;\n\nreturn { json: { isAuthorized: true, formattedLine, chatId: chat.id, messageId: messageId } };"
+      },
+      "name": "Code: Guard & Parse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2016,
+        736
+      ],
+      "id": "db43fe49-a779-4943-9f8e-a856e51dc565"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.isAuthorized }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "IF Authorized?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -1776,
+        736
+      ],
+      "id": "65ce0ee4-1b8f-4969-889b-4cc7de7e102f"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "=⛔ Accesso negato.",
+        "additionalFields": {
+          "reply_to_message_id": "={{ $json.messageId }}"
+        }
+      },
+      "name": "Telegram Reply Unauthorized",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -1536,
+        976
+      ],
+      "id": "aa379828-86e1-4894-88f2-f40f149a6599",
+      "webhookId": "799940b6-2458-4c76-8067-cb16d931f37a",
+      "credentials": {
+        "telegramApi": {
+          "id": "IVshL61QPjLHP1iv",
+          "name": "Ingest_Note"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const currentData = $input.first().json;\nconst guardData = $('Code: Guard & Parse').item.json;\nconst formattedLine = guardData.formattedLine;\n\nlet oldContent = '';\nif (currentData.data !== undefined) oldContent = String(currentData.data);\nelse if (currentData.body !== undefined) oldContent = String(currentData.body);\nelse if (currentData.text !== undefined) oldContent = String(currentData.text);\n\nconst newContent = oldContent.trim() ? oldContent.trim() + '\\n' + formattedLine : formattedLine;\nconst tagMatch = formattedLine.match(/\\[(.*?)\\]/);\nconst tag = tagMatch ? tagMatch[1] : 'PERSONALE';\n\nreturn { json: { newContent, chatId: guardData.chatId, messageId: guardData.messageId, tag: tag } };"
+      },
+      "name": "Code: Append Logic",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1296,
+        576
+      ],
+      "id": "96ca1339-746f-4fdb-b6c2-274af9092ff2"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Code: Append Logic').item.json.chatId }}",
+        "text": "=✅ Nota [{{ $('Code: Append Logic').item.json.tag }}] aggiunta. Analisi stasera ore 20:00.",
+        "additionalFields": {
+          "reply_to_message_id": "={{ $('Code: Append Logic').item.json.messageId }}"
+        }
+      },
+      "name": "Telegram Reply Success",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -816,
+        576
+      ],
+      "id": "f988a176-0538-4b1c-a48c-1d2ddddcab0b",
+      "webhookId": "73c3bc63-843b-4b1e-a008-aa0b7b642e77",
+      "credentials": {
+        "telegramApi": {
+          "id": "IVshL61QPjLHP1iv",
+          "name": "Ingest_Note"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Code: Append Logic').item.json.chatId }}",
+        "text": "=️ Salvataggio fallito.",
+        "additionalFields": {
+          "reply_to_message_id": "={{ $('Code: Append Logic').item.json.messageId }}"
+        }
+      },
+      "name": "Telegram Reply Error",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -816,
+        816
+      ],
+      "id": "7ab8a24e-ed9c-4796-804e-2df2f95a696b",
+      "webhookId": "97c8aaef-d13a-4e14-8d3e-498ea06ddfdd",
+      "credentials": {
+        "telegramApi": {
+          "id": "IVshL61QPjLHP1iv",
+          "name": "Ingest_Note"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "tp://192.168.8.124:8080/remote.php/dav/files/admin/AI_Inbox/notes_v3.txt",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "options": {
+          "allowUnauthorizedCerts": true,
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "name": "HTTP GET notes_v3.txt",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -1536,
+        576
+      ],
+      "id": "ee6dc504-e252-4872-9de0-326ad23522ea",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "WevYWVPe2Sz2UAqp",
+          "name": "nextcloud WebDAV Basic"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "http://192.168.8.124:8080/remote.php/dav/files/admin/AI_Inbox/notes_v3.txt",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "text/plain"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "body": "={{ $json.newContent }}",
+        "options": {}
+      },
+      "name": "HTTP PUT notes_v3.txt",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -1056,
+        576
+      ],
+      "id": "e024fe1b-77e7-4224-b87d-d1fff66baacb",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "WevYWVPe2Sz2UAqp",
+          "name": "nextcloud WebDAV Basic"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Code: Guard & Parse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Guard & Parse": {
+      "main": [
+        [
+          {
+            "node": "IF Authorized?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Authorized?": {
+      "main": [
+        [
+          {
+            "node": "HTTP GET notes_v3.txt",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Telegram Reply Unauthorized",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Append Logic": {
+      "main": [
+        [
+          {
+            "node": "HTTP PUT notes_v3.txt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP GET notes_v3.txt": {
+      "main": [
+        [
+          {
+            "node": "Code: Append Logic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP PUT notes_v3.txt": {
+      "main": [
+        [
+          {
+            "node": "Telegram Reply Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "379cf11d-2879-4cd9-804e-64e69dfc13f9",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "c48a3fda0169838b4d38a59adf3ff689edef6ce2d0cfca6afeaf2a9633e5ff8e"
+  },
+  "nodeGroups": [],
+  "id": "sI41sCoFpUwzZM1T",
+  "tags": []
+}

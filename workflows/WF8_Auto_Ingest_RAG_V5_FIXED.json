@@ -1,0 +1,398 @@
+{
+  "name": "WF8_Auto_Ingest_RAG_V5_FIXED",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        }
+      },
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -2160,
+        304
+      ],
+      "id": "325d0b4a-f411-43b8-a762-f444eda32661"
+    },
+    {
+      "parameters": {
+        "jsCode": "const url = 'http://192.168.8.124:8080/remote.php/dav/files/admin/RAG_Inbox/';\nconst propfindBody = `<?xml version=\"1.0\"?><d:propfind xmlns:d=\"DAV:\"><d:prop><d:displayname/><d:resourcetype/><d:getcontenttype/></d:prop></d:propfind>`;\n\nconst user = $env.NEXTCLOUD_USER;\nconst pass = $env.NEXTCLOUD_PASS;\nif (!user || !pass) {\n  throw new Error('NEXTCLOUD_USER or NEXTCLOUD_PASS environment variables are missing');\n}\nconst authHeader = 'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64');\n\nconst response = await this.helpers.httpRequest({\n  method: 'PROPFIND',\n  url: url,\n  headers: {\n    'Authorization': authHeader,\n    'Depth': '1',\n    'Content-Type': 'application/xml'\n  },\n  body: propfindBody,\n  returnFullResponse: true\n});\n\nconst xmlText = response.body;\nconst files = [];\nconst responseRegex = /<d:response>([\\s\\S]*?)<\\/d:response>/g;\nlet match;\nconst prefix = '/remote.php/dav/files/admin/';\n\nwhile ((match = responseRegex.exec(xmlText)) !== null) {\n  const responseBlock = match[1];\n  const hrefMatch = responseBlock.match(/<d:href>([^<]+)<\\/d:href>/);\n  const href = hrefMatch ? hrefMatch[1] : null;\n  const resourceTypeMatch = responseBlock.match(/<d:resourcetype>([\\s\\S]*?)<\\/d:resourcetype>/);\n  const isDirectory = resourceTypeMatch && resourceTypeMatch[1].includes('<d:collection/>');\n\n  if (href && !isDirectory) {\n    const relativePath = href.startsWith(prefix) ? href.substring(prefix.length) : href;\n    const fileName = relativePath.split('/').pop();\n    if (fileName && (fileName.endsWith('.md') || fileName.endsWith('.txt'))) {\n      files.push({ json: { file_path: relativePath, file_name: fileName, nc_path: relativePath } });\n    }\n  }\n}\n\nreturn files;"
+      },
+      "name": "WebDAV List Files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1920,
+        304
+      ],
+      "id": "f5e11cac-c5c9-40d4-97e8-5e78d44dbcd1"
+    },
+    {
+      "parameters": {
+        "url": "={{ 'http://192.168.8.124:8080/remote.php/dav/files/admin/' + $json.file_path }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "options": {
+          "response": {
+            "response": {}
+          }
+        }
+      },
+      "name": "HTTP Request: Download",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -1680,
+        304
+      ],
+      "id": "d90a0e50-eb3b-47e7-a8df-fb6734b12401",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "6mi3UprN3PxoCQi9",
+          "name": "nexctloud ultimo worflow n 8"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst allChunks = [];\n\nfor (let i = 0; i < items.length; i++) {\n  const item = items[i];\n  const listNodeData = $('WebDAV List Files').itemMatching(i).json;\n  const fileName = listNodeData.file_name || 'unknown.md';\n  const ncPath = listNodeData.nc_path || '/RAG_Inbox/';\n\n  let text = '';\n  if (item.binary && item.binary.data) {\n    text = Buffer.from(item.binary.data, 'base64').toString('utf8');\n  } else if (item.json.data && typeof item.json.data === 'string') {\n    text = item.json.data;\n  }\n\n  const chunkSize = 800;\n  const overlap = 100;\n  const step = chunkSize - overlap;\n  const totalChunks = Math.max(1, Math.ceil(text.length / step));\n\n  let idx = 1;\n  for (let pos = 0; pos < text.length; pos += step) {\n    allChunks.push({\n      json: {\n        chunk_text: text.substring(pos, pos + chunkSize),\n        file_name: fileName,\n        chunk_index: idx,\n        total_chunks: totalChunks,\n        nc_path: ncPath\n      },\n      pairedItem: { item: i }\n    });\n    idx++;\n  }\n}\n\nreturn allChunks;"
+      },
+      "name": "Code: Chunking",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1440,
+        304
+      ],
+      "id": "359631b4-e29c-4481-96f4-1db3c30a022c"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.8.129:4000/v1/embeddings", 
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"text-embedding-bge-m3\",\n  \"input\": {{ JSON.stringify($json.chunk_text) }}\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "name": "HTTP: Embedding Bionic",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -1200,
+        304
+      ],
+      "id": "334c4fa6-f10b-4c98-8aa2-72253be1a2f0",
+      "retryOnFail": true,
+      "maxTries": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "const chunkData = $('Code: Chunking').item.json;\nconst fileName = chunkData.file_name || 'unknown_file';\nconst chunkIndex = chunkData.chunk_index || 1;\nconst ncPath = chunkData.nc_path || '/RAG_Inbox/';\nconst chunkText = chunkData.chunk_text || '';\nconst totalChunks = chunkData.total_chunks || null;\nconst embedding = $json.data?.[0]?.embedding || $json.embedding || [];\n\nfunction generateUUID() {\n  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {\n    const r = Math.random() * 16 | 0;\n    const v = c === 'x' ? r : (r & 0x3 | 0x8);\n    return v.toString(16);\n  });\n}\n\nreturn {\n  json: {\n    qdrant_id: generateUUID(),\n    vector: embedding,\n    payload: {\n      chunk_id: `${fileName}_chunk${chunkIndex}`,\n      file_name: fileName,\n      chunk_index: chunkIndex,\n      text_content: chunkText,\n      document_type: \"auto_ingested\",\n      language: \"it\",\n      status: \"active\",\n      source_reference: ncPath,\n      nextcloud_path: ncPath,\n      ingested_at: new Date().toISOString()\n    },\n    nc_path: ncPath,\n    file_name: fileName,\n    total_chunks: totalChunks\n  }\n};"
+      },
+      "name": "Code: Prep Qdrant Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -960,
+        304
+      ],
+      "id": "e382fae3-ac97-48c2-af10-0eb8aec71593"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-vec-1",
+              "leftValue": "={{ $json.vector ? $json.vector.length : 0 }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "IF Embedding Valido?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -720,
+        304
+      ],
+      "id": "f4fc3fba-8000-41a3-a876-43d4727f3590"
+    },
+    {
+      "parameters": {
+        "chatId": "708137568",
+        "text": "=⚠️ Embedding vuoto/non valido per il chunk {{ $json.file_name }} (chunk {{ $('Code: Prep Qdrant Payload').item.json.payload.chunk_index }})\n\nIl chunk NON è stato scritto su Qdrant. Il file resterà in RAG_Inbox per un nuovo tentativo.",
+        "additionalFields": {}
+      },
+      "name": "Error Notification (Embedding)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -480,
+        528
+      ],
+      "id": "541715f1-a163-4661-87a8-bb447ec415f8",
+      "webhookId": "6b6ac879-b29e-4aae-813f-82e5a200bf46",
+      "credentials": {
+        "telegramApi": {
+          "id": "IVshL61QPjLHP1iv",
+          "name": "Ingest_Note"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "http://192.168.8.124:6333/collections/trade_bot_knowledge/points?wait=true",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"points\": [\n    {\n      \"id\": {{ JSON.stringify($json.qdrant_id) }},\n      \"vector\": {{ JSON.stringify($json.vector) }},\n      \"payload\": {{ JSON.stringify($json.payload) }}\n    }\n  ]\n}",
+        "options": {}
+      },
+      "name": "HTTP: Qdrant Upsert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -480,
+        144
+      ],
+      "id": "b30cdba0-f238-424d-94bb-e88564cfc693",
+      "retryOnFail": true,
+      "maxTries": 2
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst map = {};\n\nfor (let i = 0; i < items.length; i++) {\n  const meta = $('Code: Prep Qdrant Payload').itemMatching(i).json;\n  const key = meta.file_name;\n  if (!map[key]) {\n    map[key] = {\n      file_name: meta.file_name,\n      nc_path: meta.nc_path,\n      total_chunks: meta.total_chunks,\n      success_count: 0\n    };\n  }\n  map[key].success_count += 1;\n}\n\nreturn Object.values(map).map(f => ({\n  json: {\n    file_name: f.file_name,\n    nc_path: f.nc_path,\n    total_chunks: f.total_chunks,\n    success_count: f.success_count,\n    complete: f.total_chunks != null ? f.success_count >= f.total_chunks : true\n  }\n}));"
+      },
+      "name": "Aggrega Esiti per File",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        144
+      ],
+      "id": "235cc519-b041-4c7e-b6cb-a2adf37864ab"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "cond-complete-1",
+              "leftValue": "={{ $json.complete }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "IF File Completo?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        0,
+        144
+      ],
+      "id": "54007688-cd10-4a35-9a5b-c93ef4b56806"
+    },
+    {
+      "parameters": {
+        "jsCode": "const fileName = $json.file_name;\nconst ncPath = $json.nc_path;\nconst sourceUrl = `http://192.168.8.124:8080/remote.php/dav/files/admin/${ncPath}`;\nconst destinationUrl = `http://192.168.8.124:8080/remote.php/dav/files/admin/RAG_Inbox/Processed/${fileName}`;\n\nconst user = $env.NEXTCLOUD_USER;\nconst pass = $env.NEXTCLOUD_PASS;\nif (!user || !pass) {\n  throw new Error('NEXTCLOUD_USER or NEXTCLOUD_PASS environment variables are missing');\n}\nconst authHeader = 'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64');\n\ntry {\n  // MOVE nativo WebDAV (operazione atomica)\n  await this.helpers.httpRequest({\n    method: 'MOVE',\n    url: sourceUrl,\n    headers: {\n      'Authorization': authHeader,\n      'Destination': destinationUrl,\n      'Overwrite': 'T'\n    }\n  });\n\n  return [{ json: { success: true, moved_file: fileName, status: 'moved_successfully' } }];\n} catch (error) {\n  if (error.response?.status === 404 || error.statusCode === 404) {\n    return [{ json: { success: true, moved_file: fileName, status: 'already_processed' } }];\n  }\n  throw error;\n}"
+      },
+      "name": "Code: WebDAV Move",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "id": "699f1de5-1ee5-4c35-8af2-0560e305bd95"
+    },
+    {
+      "parameters": {},
+      "name": "File Incompleto - Riprova Prossimo Ciclo",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        240,
+        288
+      ],
+      "id": "c069ed7e-0a15-4f60-a49c-82d0c647fd46"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "WebDAV List Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WebDAV List Files": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request: Download",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request: Download": {
+      "main": [
+        [
+          {
+            "node": "Code: Chunking",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Chunking": {
+      "main": [
+        [
+          {
+            "node": "HTTP: Embedding Bionic",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP: Embedding Bionic": {
+      "main": [
+        [
+          {
+            "node": "Code: Prep Qdrant Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Prep Qdrant Payload": {
+      "main": [
+        [
+          {
+            "node": "IF Embedding Valido?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Embedding Valido?": {
+      "main": [
+        [
+          {
+            "node": "HTTP: Qdrant Upsert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Notification (Embedding)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP: Qdrant Upsert": {
+      "main": [
+        [
+          {
+            "node": "Aggrega Esiti per File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggrega Esiti per File": {
+      "main": [
+        [
+          {
+            "node": "IF File Completo?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF File Completo?": {
+      "main": [
+        [
+          {
+            "node": "Code: WebDAV Move",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "File Incompleto - Riprova Prossimo Ciclo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "1cba6b77-92da-4f29-bdbd-f4f4b3f28582",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "c48a3fda0169838b4d38a59adf3ff689edef6ce2d0cfca6afeaf2a9633e5ff8e"
+  },
+  "nodeGroups": [],
+  "id": "skbAetbUG4I2AKwW",
+  "tags": []
+}

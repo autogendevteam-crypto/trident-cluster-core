@@ -1,0 +1,460 @@
+{
+  "name": "2_Analisi_AI_MultiProvider_FIXED",
+  "nodes": [
+    {
+      "parameters": {
+        "returnOutput": "allRuns"
+      },
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        -2160,
+        1424
+      ],
+      "id": "cb994116-ee40-4aba-b8d3-754becf8c9cb"
+    },
+    {
+      "parameters": {
+        "jsCode": "const dataStr = JSON.stringify($json.aggregatedData || [{ source: 'raw-input', content: JSON.stringify($json) }]);\nconst prompt = `Sei un assistente che organizza note personali. NON stai dando consigli finanziari, stai solo categorizzando informazioni gia note.\n\nCompito:\n1. Identifica task pendenti\n2. Categorizza per area (Trading, Lavoro, Personale, Urgenze, Progetti)\n3. Estrai lista azioni operative\n4. Valuta sentiment generale\n\nRispondi SOLO con un oggetto JSON valido con chiavi: sentiment, categorie, azioni_operative, urgenze.\n\nDATI:\n` + dataStr;\n\nconst baseBody = { messages: [{ role: 'user', content: prompt }], temperature: 0.3, stream: false };\n\nreturn [{ json: {\n  bionicBody: JSON.stringify({ ...baseBody, model: 'qwen2.5-coder-14b-instruct' }),\n  qwenBody: JSON.stringify({ ...baseBody, model: $env.QWEN_MODEL || 'auto' }),\n  groqBody: JSON.stringify({ ...baseBody, model: 'openai/gpt-oss-120b' })\n}}];"
+      },
+      "name": "Prepare Bodies",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1888,
+        1344
+      ],
+      "id": "eadf836f-e9d0-41f2-92af-7c77f3a37e61"
+    },
+    {
+      "parameters": {
+        "url": "http://192.168.8.129:4000/v1/models", 
+        "options": {
+          "timeout": 4000
+        }
+      },
+      "name": "0. Bionic Ping",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -1552,
+        1280
+      ],
+      "id": "605f0f58-98c7-4aeb-bc58-79252d8246a5",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ !!$json.data }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "0. Bionic attivo?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -1280,
+        1264
+      ],
+      "id": "b9702495-e921-4cdf-ae22-dae18857153e"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.8.129:4000/v1/chat/completions", 
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $('Prepare Bodies').item.json.bionicBody }}",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "name": "1. Bionic (locale)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -832,
+        1216
+      ],
+      "id": "0beb0eb3-e77d-4b0d-aeee-05c98aad3b3f",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ !!($json.choices && $json.choices[0] && $json.choices[0].message) }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "1. Bionic OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -384,
+        1264
+      ],
+      "id": "5e71b16d-45b8-4d3d-bb9e-6b8ccc77ee82"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.QWEN_BASE_URL }}/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.QWEN_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $('Prepare Bodies').item.json.qwenBody }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "name": "2. Qwen (Token Plan)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -1216,
+        1744
+      ],
+      "id": "41fa5368-51b2-4a1e-913c-c73d657f505c",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ !!($json.choices && $json.choices[0] && $json.choices[0].message) }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "2. Qwen OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -848,
+        1536
+      ],
+      "id": "6d4e5a85-234b-44a6-84c4-ffd30a650042"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $env.GROQ_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $('Prepare Bodies').item.json.groqBody }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "name": "3. Groq (sicurezza)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -624,
+        2064
+      ],
+      "id": "1320ff9c-1a31-43e6-9dec-501a38ab7a21",
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ !!($json.choices && $json.choices[0] && $json.choices[0].message) }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "3. Groq OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -304,
+        2144
+      ],
+      "id": "c86acacd-e666-4d10-a249-0107d2e2f6bc"
+    },
+    {
+      "parameters": {
+        "jsCode": "let raw = ($json.choices && $json.choices[0] && $json.choices[0].message) ? $json.choices[0].message.content : '';\nraw = String(raw).replace(/```json\\n?/gi,'').replace(/```\\n?/gi,'').trim();\ntry {\n  const parsed = JSON.parse(raw);\n  if (!parsed.sentiment) parsed.sentiment = 'Non determinato';\n  if (!parsed.categorie) parsed.categorie = {};\n  if (!Array.isArray(parsed.azioni_operative)) parsed.azioni_operative = [];\n  if (!Array.isArray(parsed.urgenze)) parsed.urgenze = [];\n  return [{ json: { success: true, report: parsed, provider: $json.model || 'unknown' } }];\n} catch (e) {\n  return [{ json: { success: false, error: e.message, raw: raw.slice(0,500) } }];\n}"
+      },
+      "name": "Validate & Parse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        160,
+        1920
+      ],
+      "id": "497be88a-7a7e-4d98-9e6f-36f9ef2195f5"
+    },
+    {
+      "parameters": {
+        "workflowId": "6vJnOJ4PzmKfU3nO",
+        "options": {}
+      },
+      "name": "Call 3_Consegna_Notifica",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        400,
+        1712
+      ],
+      "id": "430a7043-9c8b-468f-939a-89dacabb4eea"
+    },
+    {
+      "parameters": {
+        "chatId": "708137568",
+        "text": "=⚠️ Cascata AI fallita: Bionic → Qwen → Groq.\nErrore ultimo: {{ $json.error || 'sconosciuto' }}",
+        "additionalFields": {}
+      },
+      "name": "Error Notification (Telegram)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        224,
+        2320
+      ],
+      "id": "827faba5-7336-4efc-b025-afc761c5d71a",
+      "webhookId": "edcb1716-a448-4712-bcff-af4de1d8e999",
+      "credentials": {
+        "telegramApi": {
+          "id": "yJLNGB3kJ2tS3b1W",
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "pinData": {
+    "Execute Workflow Trigger": [
+      {
+        "json": {
+          "aggregatedData": [
+            {
+              "source": "telegram",
+              "content": "Domani riunione progetto Trident alle 10. Preparare report Q3. Urgente: fix bug produzione entro venerdì."
+            },
+            {
+              "source": "memos",
+              "content": "BTC a 62k, comprare se scende sotto 60k. Trading: stop loss a 58k."
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Prepare Bodies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Bodies": {
+      "main": [
+        [
+          {
+            "node": "0. Bionic Ping",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0. Bionic Ping": {
+      "main": [
+        [
+          {
+            "node": "0. Bionic attivo?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "0. Bionic attivo?": {
+      "main": [
+        [
+          {
+            "node": "1. Bionic (locale)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2. Qwen (Token Plan)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Bionic (locale)": {
+      "main": [
+        [
+          {
+            "node": "1. Bionic OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Bionic OK?": {
+      "main": [
+        [
+          {
+            "node": "Validate & Parse",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "2. Qwen (Token Plan)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Qwen (Token Plan)": {
+      "main": [
+        [
+          {
+            "node": "2. Qwen OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Qwen OK?": {
+      "main": [
+        [
+          {
+            "node": "Validate & Parse",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "3. Groq (sicurezza)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Groq (sicurezza)": {
+      "main": [
+        [
+          {
+            "node": "3. Groq OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Groq OK?": {
+      "main": [
+        [
+          {
+            "node": "Validate & Parse",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Notification (Telegram)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate & Parse": {
+      "main": [
+        [
+          {
+            "node": "Call 3_Consegna_Notifica",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "6a26763a-cc36-43d5-b89b-70ca19da5cbd",
+  "meta": {
+    "instanceId": "c48a3fda0169838b4d38a59adf3ff689edef6ce2d0cfca6afeaf2a9633e5ff8e"
+  },
+  "nodeGroups": [],
+  "id": "kVkamtiliHz7uyHu",
+  "tags": []
+}

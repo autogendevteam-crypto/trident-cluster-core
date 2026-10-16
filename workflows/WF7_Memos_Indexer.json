@@ -1,0 +1,228 @@
+{
+  "name": "WF7_Memos_Indexer",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "id": "ac76dd1f-395f-420b-a2b0-48798a20f3fb",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -48,
+        -128
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://192.168.8.124:5230/api/v1/memos",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "158058e7-acb5-44f7-9fb8-9fbb25a72f26",
+      "name": "HTTP Request: Get Memos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        224,
+        -112
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "JxijNUpodecXu5wi",
+          "name": "Memos API Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. AUTO-RILEVAMENTO STRUTTURA DATI\nlet memosList = [];\nconst firstItem = $input.first().json;\n\nif (firstItem.memos && Array.isArray(firstItem.memos)) {\n  memosList = firstItem.memos;\n} else {\n  memosList = $input.all().map(item => item.json);\n}\n\nconst chunks = [];\n\n// 2. CHUNKING (800 char, overlap 100)\nfor (const memo of memosList) {\n  const text = memo.content || '';\n  const memoId = memo.name ? memo.name.split('/')[1] : (memo.id || 'unknown');\n  const author = typeof memo.creator === 'string' ? memo.creator : ((memo.creator && memo.creator.nickname) || 'admin');\n  const createdAt = memo.createTime || new Date().toISOString();\n  const tags = memo.tags || [];\n\n  if (!text || !text.trim()) continue;\n\n  const chunkSize = 800;\n  const overlap = 100;\n  let index = 0;\n\n  for (let i = 0; i < text.length; i += (chunkSize - overlap)) {\n    const chunkText = text.substring(i, i + chunkSize);\n    chunks.push({\n      json: {\n        memo_id: memoId,\n        author: author,\n        created_at: createdAt,\n        chunk_index: index,\n        text_content: chunkText.trim(),\n        source_reference: 'memos://' + memoId,\n        tags: tags,\n        bionic_body: {\n          model: 'text-embedding-bge-m3',\n          input: chunkText.trim()\n        }\n      }\n    });\n    index++;\n  }\n}\n\nreturn chunks;"
+      },
+      "id": "6caa67fa-142f-4505-b672-0f39e50bc3de",
+      "name": "Code: Filter & Chunk",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.8.129:4000/v1/embeddings", 
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.bionic_body) }}",
+        "options": {}
+      },
+      "id": "e14b79dd-3193-4843-8e64-cf5a343218b2",
+      "name": "HTTP Request: Bionic Embed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        704,
+        -224
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// MERGE: ricongiunge embedding (risposta Bionic) con i campi originali del chunk\n// Risolve il bug \"campi persi dopo Bionic Embed\"\nconst chunks = $('Code: Filter & Chunk').all();\nconst items = $input.all();\n\nreturn items.map((item, i) => {\n  const emb = (item.json.data && item.json.data[0]) ? item.json.data[0].embedding : null;\n  const base = chunks[i] ? chunks[i].json : {};\n  return {\n    json: {\n      ...base,\n      embedding: emb\n    }\n  };\n});"
+      },
+      "id": "4a27f9da-1bba-410f-9365-1fa08fa377a8",
+      "name": "Code: Merge Embedding",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        -272
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// === WF7 v2.0 === IDs FNV-1a (sandbox-safe) + Classificatore + Body nativo\n\n// FNV-1a 64-bit deterministico -> intero uint64 valido per Qdrant\nfunction fnv1a64(str) {\n  let hash = 0xcbf29ce484222325n;\n  const prime = 0x100000001b3n;\n  for (let i = 0; i < str.length; i++) {\n    hash ^= BigInt(str.charCodeAt(i));\n    hash = (hash * prime) & 0xFFFFFFFFFFFFFFFFn;\n  }\n  return Number(hash >> 11n);\n}\n\n// --- CLASSIFICATORE (tag reali Memos 08/10/2026) ---\nconst SELF_TAGS = new Set(['sys','sys/hardware','sys/sicurezza','sys/nodo','ops','ops/workflow','ops/backup','backup','ups','nut','storage','rete','ip','sicurezza','script','comandi','limiti','flussi','troubleshooting','always-on','architettura','themis','atlas','prometheus','hermes','s23','termux','android','trident','cluster','bionic','ai','ai/capacita','ai/agente','ai/mcp','llm','ollama','mcp','rag','embedding','memoria','axiom','cortex','nexus','sentinel','synapse','vanguard','n8n','workflow','automazione','wf1','wf2','wf3','wf4','qdrant','nextcloud','postgres','cloudflare','google-drive']);\nconst SELF_PREFIXES = ['sys/', 'ops/', 'ai/'];\nconst FORCE_SELF = new Set(['self']);\nconst FORCE_EPISODIC = new Set(['diario', 'foto', 'personale']);\n\nconst items = $input.all();\nconst out = [];\n\nfor (const item of items) {\n  const emb = item.json.embedding;\n  if (!emb || !Array.isArray(emb)) continue;\n\n  // Estrai tag (dal campo tags o dal testo #tag)\n  let tags = item.json.tags || [];\n  if (!tags.length) {\n    const m = (item.json.text_content || '').match(/#[a-zA-Z0-9_\\/-]+/g) || [];\n    tags = m.map(x => x.slice(1).toLowerCase());\n  } else {\n    tags = tags.map(t => String(t).toLowerCase().replace(/^#/, ''));\n  }\n\n  // Classificazione SELF / EPISODIC\n  let docType = 'episodic_memory';\n  let reason = 'default_episodic';\n  if (tags.some(t => FORCE_SELF.has(t))) { docType = 'self_knowledge'; reason = 'override_#self'; }\n  else if (tags.some(t => FORCE_EPISODIC.has(t))) { docType = 'episodic_memory'; reason = 'override_personale'; }\n  else if (tags.some(t => SELF_TAGS.has(t) || SELF_PREFIXES.some(p => t.startsWith(p)))) { docType = 'self_knowledge'; reason = 'tag_sistema'; }\n  else {\n    const text = (item.json.text_content || '').toLowerCase();\n    const kw = ['trident','themis','prometheus','atlas','qdrant','bionic','workflow','backup','cloudflare','nextcloud'];\n    if (kw.some(k => text.includes(k))) { docType = 'self_knowledge'; reason = 'keyword_fallback'; }\n  }\n\n  // ID deterministico\n  const idSource = `memos_${item.json.memo_id}_chunk${item.json.chunk_index}`;\n\n  // Body Qdrant come OGGETTO NATIVO (niente espressioni n8n -> zero errori validazione)\n  out.push({\n    json: {\n      document_type: docType,\n      classification_reason: reason,\n      body: {\n        points: [{\n          id: fnv1a64(idSource),\n          vector: emb,\n          payload: {\n            source: 'memos',\n            memo_id: item.json.memo_id,\n            author: item.json.author,\n            created_at: item.json.created_at,\n            chunk_index: item.json.chunk_index,\n            document_type: docType,\n            classification_reason: reason,\n            text_content: item.json.text_content,\n            source_reference: item.json.source_reference\n          }\n        }]\n      }\n    }\n  });\n}\n\nreturn out;"
+      },
+      "id": "d576fef3-fa9c-4160-9c08-c5c0c83b2bd0",
+      "name": "Code: Generate Qdrant IDs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1232,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "http://192.168.8.124:6333/collections/trade_bot_knowledge/points?wait=true",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {}
+      },
+      "id": "0690291d-c79a-4d14-9820-8b13205719fb",
+      "name": "HTTP Request: Qdrant Upsert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1488,
+        -352
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconsole.log('✅ WF7 completato: ' + items.length + ' chunk indicizzati (SELF: ' + items.filter(i => i.json.document_type === 'self_knowledge').length + ' | EPISODIC: ' + items.filter(i => i.json.document_type === 'episodic_memory').length + ')');\nreturn items;"
+      },
+      "id": "90327978-25f3-4f84-b48f-e2ea03fdf022",
+      "name": "Code: Log Success",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1872,
+        -400
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request: Get Memos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request: Get Memos": {
+      "main": [
+        [
+          {
+            "node": "Code: Filter & Chunk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Filter & Chunk": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request: Bionic Embed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request: Bionic Embed": {
+      "main": [
+        [
+          {
+            "node": "Code: Merge Embedding",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Merge Embedding": {
+      "main": [
+        [
+          {
+            "node": "Code: Generate Qdrant IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code: Generate Qdrant IDs": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request: Qdrant Upsert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request: Qdrant Upsert": {
+      "main": [
+        [
+          {
+            "node": "Code: Log Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "36eea23e-7a07-4277-ae5a-b5a19b2e1b7a",
+  "meta": {
+    "instanceId": "c48a3fda0169838b4d38a59adf3ff689edef6ce2d0cfca6afeaf2a9633e5ff8e"
+  },
+  "nodeGroups": [],
+  "id": "2DpFWRwfsK6QMhH4",
+  "tags": []
+}

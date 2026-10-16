@@ -1,0 +1,66 @@
+# Secrets / environment
+.env
+.env.local
+*.env
+!*.env.example
+gateway/.env
+commander/.env
+*.key
+*.bak
+*.zip
+__pycache__/
+.venv/
+
+# Python / virtual environments
+venv/
+env/
+*.pyc
+*.pyo
+*.pyd
+
+# Build / dist / logs
+dist/
+build/
+*.log
+crash.log
+
+# Backups locali
+_backup_TRIDENT_*/
+TRIDENT_backup_no_secrets_*.zip
+
+# OS / editor
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/
+# Secrets / environment
+.env
+*.env
+!*.env.example
+gateway/.env
+commander/.env
+
+# Python / virtual environments
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Build / dist / logs
+dist/
+build/
+*.log
+crash.log
+
+# Backups locali
+_backup_TRIDENT_*/
+TRIDENT_backup_no_secrets_*.zip
+
+# OS / editor
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/

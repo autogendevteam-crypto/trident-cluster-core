@@ -1,0 +1,140 @@
+{
+  "name": "3_Consegna_Notifica_FIXED",
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        608,
+        -112
+      ],
+      "id": "6d523f60-d51d-4d92-b804-6e2eaae58563"
+    },
+    {
+      "parameters": {
+        "jsCode": "const inp = $json;\nlet text;\nif (inp.success === true && inp.report) {\n  const r = inp.report;\n  const L = [];\n  L.push('📊 REPORT ANALISI AI');\n  L.push('🤖 Provider: ' + (inp.provider || 'n/d'));\n  L.push('💭 Sentiment: ' + (r.sentiment || 'n/d'));\n  L.push('');\n  L.push('📂 CATEGORIE:');\n  const cat = r.categorie;\n  if (Array.isArray(cat)) {\n    if (cat.length === 0) L.push('  • nessuna');\n    cat.forEach(c => L.push('  • ' + (typeof c === 'string' ? c : JSON.stringify(c))));\n  } else if (cat && typeof cat === 'object') {\n    const keys = Object.keys(cat);\n    if (keys.length === 0) L.push('  • nessuna');\n    keys.forEach(k => {\n      const v = cat[k];\n      if (Array.isArray(v) && v.length > 0) {\n        L.push('  [' + k + ']');\n        v.forEach(i => L.push('    • ' + i));\n      } else if (typeof v === 'string') {\n        L.push('  [' + k + '] ' + v);\n      }\n    });\n  } else { L.push('  • n/d'); }\n  L.push('');\n  L.push('✅ AZIONI OPERATIVE:');\n  const az = Array.isArray(r.azioni_operative) ? r.azioni_operative : [];\n  if (az.length === 0) L.push('  • nessuna');\n  az.forEach(a => L.push('  • ' + (typeof a === 'string' ? a : JSON.stringify(a))));\n  L.push('');\n  L.push('🚨 URGENZE:');\n  const ur = Array.isArray(r.urgenze) ? r.urgenze : [];\n  if (ur.length === 0) L.push('  • nessuna');\n  ur.forEach(u => L.push('  • ' + (typeof u === 'string' ? u : JSON.stringify(u))));\n  text = L.join('\\n');\n} else {\n  text = '⚠️ Analisi completata ma report non parseabile.\\nErrore: ' + (inp.error || 'n/d') + '\\nRaw: ' + String(inp.raw || '').slice(0, 300);\n}\nif (text.length > 4000) text = text.slice(0, 4000) + '\\n…(troncato)';\nconst ts = new Date().toISOString().replace(/[:.]/g, '-');\nreturn [{ json: { telegramText: text, reportJson: JSON.stringify(inp.report || inp, null, 2), reportName: 'report_' + ts + '.json' } }];"
+      },
+      "name": "1. Prepara messaggio",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        832,
+        -112
+      ],
+      "id": "e06dc7fa-af86-4999-b6bc-bf9b173c03c7"
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=http://192.168.8.124:8080/remote.php/dav/files/admin/Automation_Reports/{{ $json.reportName }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json.reportJson }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "name": "2. Salva report Nextcloud",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1056,
+        -112
+      ],
+      "id": "4e7e25a0-7465-45cd-8f05-54a343d1d721",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "WevYWVPe2Sz2UAqp",
+          "name": "nextcloud WebDAV Basic"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "chatId": "708137568",
+        "text": "={{ $('1. Prepara messaggio').item.json.telegramText }}",
+        "additionalFields": {}
+      },
+      "name": "3. Invia Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1280,
+        -112
+      ],
+      "id": "a3b16548-fca0-4a3d-ba57-16a8d1d78a3c",
+      "webhookId": "700c0d96-0dc9-4ad7-8ae9-794b7bfeddc4",
+      "credentials": {
+        "telegramApi": {
+          "id": "yJLNGB3kJ2tS3b1W",
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "1. Prepara messaggio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Prepara messaggio": {
+      "main": [
+        [
+          {
+            "node": "2. Salva report Nextcloud",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Salva report Nextcloud": {
+      "main": [
+        [
+          {
+            "node": "3. Invia Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "e7e5ba1a-d8ae-49ae-9223-435761fc7014",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "c48a3fda0169838b4d38a59adf3ff689edef6ce2d0cfca6afeaf2a9633e5ff8e"
+  },
+  "nodeGroups": [],
+  "id": "6vJnOJ4PzmKfU3nO",
+  "tags": []
+}

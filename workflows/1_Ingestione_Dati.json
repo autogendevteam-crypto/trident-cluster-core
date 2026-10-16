@@ -1,0 +1,225 @@
+{
+  "name": "1_Ingestione_Dati",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 20 * * *"
+            }
+          ]
+        }
+      },
+      "name": "Schedule Trigger 20:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -816,
+        48
+      ],
+      "id": "f09269c0-45d6-48de-a09c-462c464b2bf0"
+    },
+    {
+      "parameters": {},
+      "name": "Manual Trigger (Test)",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -800,
+        528
+      ],
+      "id": "d1fd2ee7-c049-4391-a414-6c046a0bfe37"
+    },
+    {
+      "parameters": {
+        "url": "http://192.168.8.124:8080/remote.php/dav/files/admin/AI_Inbox/notes_v2.txt",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "name": "Read notes.txt",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -512,
+        224
+      ],
+      "id": "dda29237-39b8-4357-b86f-0eefa4b45339",
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "WevYWVPe2Sz2UAqp",
+          "name": "nextcloud WebDAV Basic"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const allData = [];\nconst errors = [];\n\ntry {\n  const notesNode = $('Read notes.txt').item.json;\n  \n  // Gestione robusta del contenuto\n  let content = notesNode.data || notesNode.body || notesNode.content || notesNode.text;\n  \n  if (content && typeof content === 'object') {\n    content = JSON.stringify(content);\n  }\n  \n  if (!content || content === '{}') {\n    content = JSON.stringify(notesNode);\n  }\n  \n  if (content && content.trim().length > 0) {\n    allData.push({ \n      source: 'Nextcloud', \n      content: content \n    });\n  } else {\n    errors.push('Nextcloud: file notes_v2.txt vuoto.');\n  }\n  \n} catch (e) {\n  errors.push('Nextcloud: ' + e.message);\n}\n\nreturn [{ \n  json: { \n    aggregatedData: allData, \n    errors: errors, \n    count: allData.length \n  } \n}];"
+      },
+      "name": "Parse & Normalize",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -96,
+        256
+      ],
+      "id": "cbc1272a-1e7a-45ee-a6ee-0ac587a65c2d"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.count }}",
+              "operation": "larger"
+            }
+          ]
+        }
+      },
+      "name": "Check Data Not Empty",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        160,
+        32
+      ],
+      "id": "ab86ad75-e6d6-4903-b708-c77626ffa3d0"
+    },
+    {
+      "parameters": {
+        "chatId": "708137568",
+        "text": "📭 notes.txt vuoto - nessuna nota da analizzare oggi.",
+        "additionalFields": {}
+      },
+      "name": "Notify Empty",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        640
+      ],
+      "id": "e6a6f186-da87-4635-8e30-3283fd86dac6",
+      "webhookId": "584079bd-c1e8-454d-8ebe-4d52cf4220fe",
+      "credentials": {
+        "telegramApi": {
+          "id": "yJLNGB3kJ2tS3b1W",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "kVkamtiliHz7uyHu",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/kVkamtiliHz7uyHu",
+          "cachedResultName": "2_Analisi_AI_MultiProvider_FIXED"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "name": "Call 2_Analisi_AI",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        448,
+        -32
+      ],
+      "id": "fbcfb516-db24-44b0-89fd-11632f50c0ab"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger 20:00": {
+      "main": [
+        [
+          {
+            "node": "Read notes.txt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger (Test)": {
+      "main": [
+        [
+          {
+            "node": "Read notes.txt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read notes.txt": {
+      "main": [
+        [
+          {
+            "node": "Parse & Normalize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse & Normalize": {
+      "main": [
+        [
+          {
+            "node": "Check Data Not Empty",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Data Not Empty": {
+      "main": [
+        [
+          {
+            "node": "Call 2_Analisi_AI",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify Empty",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "f5631fd6-d367-46e5-b222-212ac3d71ab3",
+  "meta": {
+    "instanceId": "c48a3fda0169838b4d38a59adf3ff689edef6ce2d0cfca6afeaf2a9633e5ff8e"
+  },
+  "nodeGroups": [],
+  "id": "UitpMk9sVo44RYTK",
+  "tags": []
+}

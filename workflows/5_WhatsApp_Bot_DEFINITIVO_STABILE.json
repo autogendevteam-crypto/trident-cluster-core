@@ -1,0 +1,275 @@
+{
+  "name": "5_WhatsApp_Bot_DEFINITIVO_STABILE",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "whatsapp",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Webhook GET Verifica",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -544,
+        96
+      ],
+      "id": "87d83ef9-331d-4a7f-81ad-af2d8f2fa367",
+      "webhookId": "67b96abb-bc55-4b76-ba63-9cc7e9e97dcd"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.query['hub.verify_token'] }}",
+              "rightValue": "Teallimone71@",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "IF Verify Token",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        80
+      ],
+      "id": "ff9a066a-ebf7-4537-857c-c9f5cc9a4584"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.query['hub.challenge'] }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "name": "Rispondi Challenge",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "317ac2ff-4c86-4bc5-8bb7-f7003d3840f8"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "Forbidden",
+        "options": {
+          "responseCode": 403
+        }
+      },
+      "name": "Rispondi 403",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        0,
+        160
+      ],
+      "id": "12cb5357-e3cc-473b-9402-0af29ee960ba"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Webhook POST Messaggi",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -480,
+        320
+      ],
+      "id": "83fb9ade-4560-481d-93a9-d9c970fdb44a",
+      "webhookId": "0e25827b-631d-42b8-be6c-1ededf112028"
+    },
+    {
+      "parameters": {
+        "jsCode": "const entry = $json.body?.entry?.[0];\nconst change = entry?.changes?.[0]?.value;\nconst message = change?.messages?.[0];\nconst contact = change?.contacts?.[0];\n\nconst sender = message?.from || null;\nconst text = message?.text?.body || (message?.type === 'text' ? 'Nessun testo' : `[Tipo: ${message?.type || 'sconosciuto'}]`);\nconst name = contact?.profile?.name || contact?.wa_id || 'Utente';\n\nif (!sender) {\n  return [{ json: { skip: true, reason: 'Nessun messaggio valido' } }];\n}\n\nreturn [{\n  json: {\n    sender: sender,\n    text: text,\n    name: name,\n    skip: false\n  }\n}];"
+      },
+      "name": "Estrai Dati",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        320
+      ],
+      "id": "8b2bbd08-0834-4d54-adac-70772fadb4e3"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.skip }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Filtra Messaggi Validi",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        0,
+        320
+      ],
+      "id": "b3859602-4cfc-4c26-b9b6-67b7fa93db17"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ status: 'received' }) }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "name": "Risposta a Meta",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        480
+      ],
+      "id": "4edae5ce-a8b6-46fb-8922-501ba87cfe76"
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "1281349908402962",
+        "recipientPhoneNumber": "={{ $json.sender }}",
+        "textBody": "={{ '✅ Messaggio ricevuto!\\n\\nCiao ' + $json.name + ',\\nho ricevuto il tuo messaggio: \"' + $json.text + '\"\\n\\nTi risponderò al più presto! 🙏' }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        320
+      ],
+      "id": "cd5ed27e-eccf-4068-893a-b7b8662a9034",
+      "name": "Invia Risposta WhatsApp",
+      "webhookId": "072d5dc5-36d6-4995-b041-8a93c499f253",
+      "credentials": {
+        "whatsAppApi": {
+          "id": "XJZeMMxT5fVPJSBd",
+          "name": "WhatsApp account 2"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook GET Verifica": {
+      "main": [
+        [
+          {
+            "node": "IF Verify Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Verify Token": {
+      "main": [
+        [
+          {
+            "node": "Rispondi Challenge",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Rispondi 403",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook POST Messaggi": {
+      "main": [
+        [
+          {
+            "node": "Estrai Dati",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Estrai Dati": {
+      "main": [
+        [
+          {
+            "node": "Filtra Messaggi Validi",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtra Messaggi Validi": {
+      "main": [
+        [
+          {
+            "node": "Invia Risposta WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Risposta a Meta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "7dd03149-52e0-4982-a2a2-ab411e08a1ec",
+  "meta": {
+    "instanceId": "c48a3fda0169838b4d38a59adf3ff689edef6ce2d0cfca6afeaf2a9633e5ff8e"
+  },
+  "nodeGroups": [],
+  "id": "quA8GIPC1v2FTeZr",
+  "tags": []
+}
