@@ -75,3 +75,8 @@ Desktop.ini
 .wrangler/
 node_modules/
 .dev.vars
+*.bak.*
+.secrets/
+.secrets/*
+logs/
+.DS_Store

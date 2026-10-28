@@ -4,6 +4,5 @@ compatibility_date = "2026-10-28"
 
 # Variabili NON sensibili.
 # Il secret TRIDENT_EDGE_TOKEN si imposta con:  wrangler secret put TRIDENT_EDGE_TOKEN
-# ATLAS_BACKEND_URL (tunnel verso Atlas) da confermare prima di abilitare il proxy.
 [vars]
-# ATLAS_BACKEND_URL = "https://<tunnel-verso-atlas>"
+ATLAS_BACKEND_URL = "https://map.trade-bot-solutions.com"
