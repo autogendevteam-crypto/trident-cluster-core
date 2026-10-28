@@ -64,3 +64,14 @@ Thumbs.db
 Desktop.ini
 .vscode/
 .idea/
+
+# === VANGUARD PATCH 2026-10-28: Worker CF + Vault hygiene ===
+# Env backups/temp creati da set_env_secret.py (.env.bak.<ts>, .env.tmp.*)
+.env.*
+!.env.example
+# Mai artefatti cifrati grezzi in questa repo (il Vault vive in tridentvault-clean)
+*.enc
+# Toolchain Wrangler / Node (non committare stato/cache/segreti locali)
+.wrangler/
+node_modules/
+.dev.vars

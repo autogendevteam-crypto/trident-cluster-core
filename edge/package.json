@@ -1,0 +1,13 @@
+{
+  "name": "trident-edge-worker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "TRIDENT Cloudflare edge worker: health check + authenticated proxy to Atlas",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
